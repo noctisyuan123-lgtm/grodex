@@ -1,6 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { SubagentTaskCard } from "./SubagentTaskCard";
+import {
+  deriveSubagentActivityLine,
+  deriveSubagentCardTitle,
+  isSubagentSpawnTool,
+  pickSubagentForSpawnTool,
+} from "./subagentProcess";
 import { ToolTimeline } from "./ToolTimeline";
-import type { ChatMessage } from "./useChatSession";
+import type { ChatMessage, SubagentRow } from "./useChatSession";
 import type { ToolRow } from "./ToolTimeline";
 
 function renderMinimalMarkdown(text: string): string {
@@ -19,7 +26,10 @@ type Props = {
   tools: ToolRow[];
   liveTools: ToolRow[];
   settledTools: ToolRow[];
+  subagents: SubagentRow[];
+  subagentModel: string | null;
   statusText: string | null;
+  processLine: string | null;
   busy: boolean;
 };
 
@@ -28,14 +38,40 @@ export function ChatTranscript({
   tools,
   liveTools,
   settledTools,
+  subagents,
+  subagentModel,
   statusText,
+  processLine,
   busy,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, tools, statusText, liveTools]);
+  }, [messages, tools, statusText, liveTools, subagents]);
+
+  const subagentCardsByToolId = useMemo(() => {
+    const out: Record<string, ReactNode> = {};
+    for (const tool of liveTools) {
+      if (!isSubagentSpawnTool(tool)) continue;
+      const subagent = pickSubagentForSpawnTool(subagents, tool);
+      out[tool.toolId] = (
+        <SubagentTaskCard
+          title={deriveSubagentCardTitle(tool, subagent)}
+          model={subagent?.model ?? subagentModel}
+          activityLine={deriveSubagentActivityLine({
+            statusMsg: statusText,
+            processLine,
+            subagentModel: subagent?.model ?? subagentModel,
+            spawnRunning: tool.status === "running",
+            subagent,
+          })}
+          active={tool.status === "running"}
+        />
+      );
+    }
+    return out;
+  }, [liveTools, subagents, subagentModel, statusText, processLine]);
 
   const showEmpty =
     messages.length === 0 && tools.length === 0 && !statusText && !busy;
@@ -44,9 +80,10 @@ export function ChatTranscript({
     <div className="chat-scroll">
       {showEmpty ? (
         <p className="chat-empty">
-          Connect a Core session, then send a message. Tool and status events
-          render even when assistant text is blocked (e.g. auth/balance). Same-UUID
-          resume uses <code>session/load</code> when you pass a known id.
+          Connect a Core session, then send a message. Tool, subagent, and status
+          events render even when assistant text is blocked (e.g. auth/balance).
+          Same-UUID resume uses <code>session/load</code> when you pass a known
+          id.
         </p>
       ) : null}
 
@@ -70,7 +107,15 @@ export function ChatTranscript({
 
       {liveTools.length > 0 ? (
         <div className="chat-process-block">
-          <ToolTimeline tools={liveTools} rollLabels />
+          <ToolTimeline
+            tools={liveTools}
+            rollLabels
+            subagentCardsByToolId={
+              Object.keys(subagentCardsByToolId).length > 0
+                ? subagentCardsByToolId
+                : undefined
+            }
+          />
         </div>
       ) : null}
 

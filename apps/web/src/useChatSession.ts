@@ -14,6 +14,15 @@ import {
 } from "./api";
 import type { ToolRow } from "./ToolTimeline";
 
+export type SubagentRow = {
+  subagentId: string;
+  title: string;
+  model?: string;
+  subagentType?: string;
+  status: "spawned" | "running" | "completed" | "failed" | "cancelled";
+  activityLine?: string;
+};
+
 export type ChatMessage =
   | { id: string; role: "user"; text: string }
   | { id: string; role: "assistant"; text: string; live?: boolean };
@@ -46,6 +55,8 @@ function upsertTool(tools: ToolRow[], event: Extract<ChatEvent, { type: "tool" }
     toolId: event.toolId,
     label: event.title,
     status,
+    kind: event.kind,
+    name: event.kind,
   };
   if (idx >= 0) {
     const next = [...tools];
@@ -53,6 +64,30 @@ function upsertTool(tools: ToolRow[], event: Extract<ChatEvent, { type: "tool" }
     return next;
   }
   return [...tools, row];
+}
+
+function upsertSubagent(
+  rows: SubagentRow[],
+  event: Extract<ChatEvent, { type: "subagent" }>
+): SubagentRow[] {
+  const idx = rows.findIndex((r) => r.subagentId === event.subagentId);
+  const row: SubagentRow = {
+    subagentId: event.subagentId,
+    title: event.title,
+    model: event.model,
+    subagentType: event.subagentType,
+    status:
+      event.status === "spawned"
+        ? "running"
+        : event.status,
+    activityLine: event.activityLine,
+  };
+  if (idx >= 0) {
+    const next = [...rows];
+    next[idx] = { ...next[idx]!, ...row };
+    return next;
+  }
+  return [...rows, row];
 }
 
 export function useChatSession() {
@@ -66,6 +101,8 @@ export function useChatSession() {
   const [tools, setTools] = useState<ToolRow[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [processLine, setProcessLine] = useState<string | null>(null);
+  const [subagents, setSubagents] = useState<SubagentRow[]>([]);
+  const [subagentModel, setSubagentModel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +152,8 @@ export function useChatSession() {
             { id: `u-${event.at}`, role: "user", text: event.text },
           ]);
           setTools([]);
+          setSubagents([]);
+          setSubagentModel(null);
           setProcessLine(null);
           setBusy(true);
           break;
@@ -142,12 +181,32 @@ export function useChatSession() {
           setBusy(false);
           setStatusText(null);
           setProcessLine(null);
+          setSubagentModel(null);
           break;
         case "status":
           setStatusText(event.text);
           break;
         case "activity":
           setProcessLine(event.text);
+          if (event.agentKind === "subagent" && event.subagentModel?.trim()) {
+            setSubagentModel(event.subagentModel.trim());
+          } else if (!event.subagentModel) {
+            /* keep last nested model until turn ends */
+          }
+          break;
+        case "subagent":
+          setSubagents((rows) => upsertSubagent(rows, event));
+          if (event.model?.trim()) setSubagentModel(event.model.trim());
+          if (event.activityLine?.trim()) setProcessLine(event.activityLine);
+          if (
+            event.status === "completed" ||
+            event.status === "failed" ||
+            event.status === "cancelled"
+          ) {
+            setSubagents((rows) =>
+              rows.filter((r) => r.subagentId !== event.subagentId)
+            );
+          }
           break;
         case "tool":
           setTools((t) => upsertTool(t, event));
@@ -172,6 +231,8 @@ export function useChatSession() {
     setError(null);
     setMessages([]);
     setTools([]);
+    setSubagents([]);
+    setSubagentModel(null);
     setProcessLine(null);
     assistantBuf.current = "";
     liveAssistantId.current = `a-${Date.now()}`;
@@ -213,6 +274,8 @@ export function useChatSession() {
     setError(null);
     setBusy(true);
     setTools([]);
+    setSubagents([]);
+    setSubagentModel(null);
     setProcessLine(null);
     try {
       await promptSession(trimmed);
@@ -227,6 +290,7 @@ export function useChatSession() {
     setBusy(false);
     setStatusText(null);
     setProcessLine(null);
+    setSubagentModel(null);
   };
 
   const connected = status.state === "connected" && session;
@@ -247,6 +311,8 @@ export function useChatSession() {
     settledTools,
     statusText,
     processLine,
+    subagents,
+    subagentModel,
     busy,
     error,
     connected,

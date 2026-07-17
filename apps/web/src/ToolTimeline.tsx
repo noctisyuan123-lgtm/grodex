@@ -1,9 +1,12 @@
 import { TextRoll } from "./TextRoll";
+import type { ReactNode } from "react";
 
 export type ToolRow = {
   toolId: string;
   label: string;
   status: "running" | "completed" | "failed";
+  kind?: string;
+  name?: string;
 };
 
 function statusTag(status: ToolRow["status"]): string {
@@ -20,9 +23,11 @@ function statusTag(status: ToolRow["status"]): string {
 function ToolRowView({
   tool,
   rollLabel = false,
+  subagentCard,
 }: {
   tool: ToolRow;
   rollLabel?: boolean;
+  subagentCard?: ReactNode;
 }) {
   const labelCore = rollLabel ? (
     <TextRoll
@@ -52,6 +57,9 @@ function ToolRowView({
           {statusTag(tool.status)}
         </span>
       </div>
+      {subagentCard ? (
+        <div className="tl-subagent-hang">{subagentCard}</div>
+      ) : null}
     </div>
   );
 }
@@ -63,9 +71,12 @@ function ToolRowView({
 export function ToolTimeline({
   tools,
   rollLabels = false,
+  subagentCardsByToolId,
 }: {
   tools: ToolRow[];
   rollLabels?: boolean;
+  /** Optional hanging subagent card per running spawn tool (toolId → node). */
+  subagentCardsByToolId?: Record<string, ReactNode>;
 }) {
   if (!tools.length) return null;
 
@@ -76,7 +87,11 @@ export function ToolTimeline({
     return (
       <div className="tl tl-live-seat">
         <div className="tl-list">
-          <ToolRowView tool={liveSeat} rollLabel />
+          <ToolRowView
+            tool={liveSeat}
+            rollLabel
+            subagentCard={subagentCardsByToolId?.[liveSeat.toolId]}
+          />
         </div>
       </div>
     );
@@ -86,7 +101,12 @@ export function ToolTimeline({
     <div className="tl">
       <div className="tl-list">
         {tools.map((t) => (
-          <ToolRowView key={t.toolId} tool={t} rollLabel={rollLabels} />
+          <ToolRowView
+            key={t.toolId}
+            tool={t}
+            rollLabel={rollLabels}
+            subagentCard={subagentCardsByToolId?.[t.toolId]}
+          />
         ))}
       </div>
     </div>

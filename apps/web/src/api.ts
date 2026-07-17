@@ -43,6 +43,19 @@ export type ChatEvent =
       type: "activity";
       text: string;
       kind?: "thinking" | "tool" | "status";
+      agentKind?: "main" | "subagent";
+      subagentModel?: string;
+      at: string;
+    }
+  | {
+      type: "subagent";
+      subagentId: string;
+      childSessionId?: string;
+      status: "spawned" | "running" | "completed" | "failed" | "cancelled";
+      title: string;
+      subagentType?: string;
+      model?: string;
+      activityLine?: string;
       at: string;
     }
   | { type: "error"; message: string; at: string }

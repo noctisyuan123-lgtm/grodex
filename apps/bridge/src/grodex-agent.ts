@@ -33,6 +33,19 @@ export class GrodexAgent {
   private promptInFlight = false;
   private turnCancelled = false;
   private activeTools = new Map<string, string>();
+  /** child_session_id values from SubagentSpawned — route nested session/update here */
+  private childSessionIds = new Set<string>();
+  /** Live subagent rows keyed by subagent_id */
+  private activeSubagents = new Map<
+    string,
+    {
+      title: string;
+      model?: string;
+      subagentType?: string;
+      childSessionId?: string;
+      activityLine?: string;
+    }
+  >();
 
   onEvent(handler: EventHandler): () => void {
     this.handlers.push(handler);
@@ -57,11 +70,57 @@ export class GrodexAgent {
 
   private emitActivity(
     text: string,
-    kind: "thinking" | "tool" | "status" = "status"
+    kind: "thinking" | "tool" | "status" = "status",
+    opts?: { agentKind?: "main" | "subagent"; subagentModel?: string }
   ): void {
     const trimmed = text.trim();
     if (!trimmed) return;
-    this.emit({ type: "activity", text: trimmed, kind, at: nowIso() });
+    this.emit({
+      type: "activity",
+      text: trimmed,
+      kind,
+      agentKind: opts?.agentKind,
+      subagentModel: opts?.subagentModel,
+      at: nowIso(),
+    });
+  }
+
+  private emitSubagent(
+    subagentId: string,
+    status: "spawned" | "running" | "completed" | "failed" | "cancelled",
+    fields: {
+      title: string;
+      subagentType?: string;
+      model?: string;
+      childSessionId?: string;
+      activityLine?: string;
+    }
+  ): void {
+    this.emit({
+      type: "subagent",
+      subagentId,
+      childSessionId: fields.childSessionId,
+      status,
+      title: fields.title,
+      subagentType: fields.subagentType,
+      model: fields.model,
+      activityLine: fields.activityLine,
+      at: nowIso(),
+    });
+  }
+
+  private isKnownSession(wire: string): boolean {
+    if (!wire) return true;
+    if (!this.providerSessionId) return true;
+    if (wire === this.providerSessionId) return true;
+    return this.childSessionIds.has(wire);
+  }
+
+  private subagentIdForChildSession(wire: string): string | undefined {
+    for (const [id, row] of this.activeSubagents) {
+      if (row.childSessionId === wire) return id;
+    }
+    return undefined;
   }
 
   private emitTool(
@@ -203,6 +262,8 @@ export class GrodexAgent {
     this.turnCancelled = false;
     this.promptInFlight = true;
     this.activeTools.clear();
+    this.childSessionIds.clear();
+    this.activeSubagents.clear();
     this.emit({ type: "user", text: trimmed, at: nowIso() });
     this.emitStatus("Waiting for model…");
     this.emitActivity("Waiting for model…", "status");
@@ -219,11 +280,15 @@ export class GrodexAgent {
       );
       this.promptInFlight = false;
       this.activeTools.clear();
+      this.childSessionIds.clear();
+      this.activeSubagents.clear();
       this.emitStatus(null);
       this.emit({ type: "assistant_done", at: nowIso() });
     } catch (err) {
       this.promptInFlight = false;
       this.activeTools.clear();
+      this.childSessionIds.clear();
+      this.activeSubagents.clear();
       this.emitStatus(null);
       if (this.turnCancelled) {
         this.emit({ type: "assistant_done", at: nowIso() });
@@ -252,11 +317,12 @@ export class GrodexAgent {
 
     if (method === "session/update") {
       const wire = String(p.sessionId ?? "").trim();
-      if (wire && this.providerSessionId && wire !== this.providerSessionId) {
-        return;
-      }
+      if (!this.isKnownSession(wire)) return;
       const update = (p.update ?? p) as Record<string, unknown>;
-      this.mapSessionUpdate(update);
+      const fromChild = Boolean(
+        wire && this.providerSessionId && wire !== this.providerSessionId
+      );
+      this.mapSessionUpdate(update, { fromChild, childSessionId: wire });
       return;
     }
 
@@ -265,27 +331,148 @@ export class GrodexAgent {
       method === "x.ai/session_notification"
     ) {
       const wire = String(p.sessionId ?? "").trim();
-      if (wire && this.providerSessionId && wire !== this.providerSessionId) {
-        return;
-      }
+      if (!this.isKnownSession(wire)) return;
       const update = (p.update ?? p) as Record<string, unknown>;
       const kind = String(update.sessionUpdate ?? "");
       if (kind === "pending_interaction") {
         this.emitStatus("Waiting for permission…");
       } else if (kind === "interaction_resolved") {
         this.emitStatus(null);
+      } else if (
+        kind === "subagent_spawned" ||
+        kind === "subagent_progress" ||
+        kind === "subagent_finished"
+      ) {
+        this.mapSubagentUpdate(kind, update);
       }
     }
   }
 
-  private mapSessionUpdate(update: Record<string, unknown>): void {
+  /** Map Core subagent lifecycle notifications (parent session channel). */
+  private mapSubagentUpdate(
+    kind: string,
+    update: Record<string, unknown>
+  ): void {
+    if (this.turnCancelled) return;
+
+    const subagentId = String(
+      update.subagent_id ?? update.child_session_id ?? ""
+    ).trim();
+    if (!subagentId) return;
+
+    if (kind === "subagent_spawned") {
+      const childSessionId = String(update.child_session_id ?? subagentId).trim();
+      const title = String(update.description ?? "Subagent").trim() || "Subagent";
+      const model =
+        typeof update.model === "string" ? update.model.trim() : undefined;
+      const subagentType =
+        typeof update.subagent_type === "string"
+          ? update.subagent_type.trim()
+          : undefined;
+
+      if (childSessionId) this.childSessionIds.add(childSessionId);
+      this.activeSubagents.set(subagentId, {
+        title,
+        model,
+        subagentType,
+        childSessionId,
+        activityLine: "Waiting for subagent",
+      });
+      this.emitSubagent(subagentId, "spawned", {
+        title,
+        model,
+        subagentType,
+        childSessionId,
+        activityLine: "Waiting for subagent",
+      });
+      this.emitActivity(title, "status", {
+        agentKind: "subagent",
+        subagentModel: model,
+      });
+      return;
+    }
+
+    if (kind === "subagent_progress") {
+      const row = this.activeSubagents.get(subagentId);
+      const turnCount = Number(update.turn_count ?? 0);
+      const toolCalls = Number(update.tool_call_count ?? 0);
+      const activityLine =
+        turnCount > 0 || toolCalls > 0
+          ? `Turn ${turnCount} · ${toolCalls} tool${toolCalls === 1 ? "" : "s"}`
+          : row?.activityLine ?? "Working…";
+
+      const next = {
+        title: row?.title ?? "Subagent",
+        model: row?.model,
+        subagentType: row?.subagentType,
+        childSessionId: row?.childSessionId,
+        activityLine,
+      };
+      this.activeSubagents.set(subagentId, next);
+      this.emitSubagent(subagentId, "running", next);
+      this.emitActivity(activityLine, "status", {
+        agentKind: "subagent",
+        subagentModel: next.model,
+      });
+      return;
+    }
+
+    if (kind === "subagent_finished") {
+      const row = this.activeSubagents.get(subagentId);
+      const rawStatus = String(update.status ?? "completed").toLowerCase();
+      const status =
+        rawStatus === "failed"
+          ? "failed"
+          : rawStatus === "cancelled" || rawStatus === "canceled"
+            ? "cancelled"
+            : "completed";
+      const childSessionId = row?.childSessionId;
+      if (childSessionId) this.childSessionIds.delete(childSessionId);
+      this.activeSubagents.delete(subagentId);
+      this.emitSubagent(subagentId, status, {
+        title: row?.title ?? "Subagent",
+        model: row?.model,
+        subagentType: row?.subagentType,
+        childSessionId,
+      });
+      if (this.activeSubagents.size === 0) {
+        this.emitStatus(null);
+      }
+    }
+  }
+
+  private mapSessionUpdate(
+    update: Record<string, unknown>,
+    ctx: { fromChild?: boolean; childSessionId?: string } = {}
+  ): void {
     if (this.turnCancelled) return;
 
     const kind = String(update.sessionUpdate ?? update.type ?? "");
     const at = nowIso();
 
+    // Subagent lifecycle may also arrive on session/update (jsonl replay path).
+    if (
+      kind === "subagent_spawned" ||
+      kind === "subagent_progress" ||
+      kind === "subagent_finished"
+    ) {
+      this.mapSubagentUpdate(kind, update);
+      return;
+    }
+
+    const nestedSubagentId = ctx.fromChild
+      ? this.subagentIdForChildSession(ctx.childSessionId ?? "")
+      : undefined;
+    const nestedRow = nestedSubagentId
+      ? this.activeSubagents.get(nestedSubagentId)
+      : undefined;
+    const nestedOpts = nestedRow
+      ? { agentKind: "subagent" as const, subagentModel: nestedRow.model }
+      : undefined;
+
     switch (kind) {
       case "agent_message_chunk": {
+        if (ctx.fromChild) break;
         const content = update.content as { text?: string } | undefined;
         const text = content?.text ?? (update.text as string) ?? "";
         if (text) {
@@ -298,6 +485,21 @@ export class GrodexAgent {
         const thought =
           content?.text?.trim() ??
           (typeof update.text === "string" ? update.text.trim() : "");
+        if (ctx.fromChild && nestedSubagentId && nestedRow) {
+          const activityLine = thought
+            ? thought.slice(0, 96)
+            : "Thinking…";
+          this.activeSubagents.set(nestedSubagentId, {
+            ...nestedRow,
+            activityLine,
+          });
+          this.emitSubagent(nestedSubagentId, "running", {
+            ...nestedRow,
+            activityLine,
+          });
+          this.emitActivity(activityLine, "thinking", nestedOpts);
+          break;
+        }
         this.emitStatus("Thinking…");
         this.emitActivity(thought ? "Thinking…" : "Thinking…", "thinking");
         break;
@@ -305,12 +507,25 @@ export class GrodexAgent {
       case "tool_call": {
         const toolId = String(update.toolCallId ?? update.id ?? randomUUID());
         const title = String(update.title ?? update.kind ?? "tool");
-        const kind = String(update.kind ?? "other");
+        const toolKind = String(update.kind ?? "other");
+        if (ctx.fromChild && nestedSubagentId && nestedRow) {
+          const activityLine = `Using ${title.slice(0, 60)}…`;
+          this.activeSubagents.set(nestedSubagentId, {
+            ...nestedRow,
+            activityLine,
+          });
+          this.emitSubagent(nestedSubagentId, "running", {
+            ...nestedRow,
+            activityLine,
+          });
+          this.emitActivity(activityLine, "tool", nestedOpts);
+          break;
+        }
         this.activeTools.set(toolId, title);
-        this.emitTool(toolId, title, "running", kind);
+        this.emitTool(toolId, title, "running", toolKind);
         this.emitStatus(`Running ${title}…`);
         this.emitActivity(
-          title.startsWith("Execute") || kind === "execute"
+          title.startsWith("Execute") || toolKind === "execute"
             ? title.slice(0, 72) + (title.length > 72 ? "…" : "")
             : `Using ${title.slice(0, 60)}…`,
           "tool"
@@ -324,12 +539,29 @@ export class GrodexAgent {
           update.title != null
             ? String(update.title)
             : this.activeTools.get(toolId) ?? "tool";
-        const kind =
+        const toolKind =
           update.kind != null ? String(update.kind) : undefined;
+
+        if (ctx.fromChild && nestedSubagentId && nestedRow) {
+          const activityLine =
+            rawStatus === "completed" || rawStatus === "success"
+              ? `Finished ${title.slice(0, 48)}`
+              : `Using ${title.slice(0, 60)}…`;
+          this.activeSubagents.set(nestedSubagentId, {
+            ...nestedRow,
+            activityLine,
+          });
+          this.emitSubagent(nestedSubagentId, "running", {
+            ...nestedRow,
+            activityLine,
+          });
+          this.emitActivity(activityLine, "tool", nestedOpts);
+          break;
+        }
 
         if (rawStatus === "failed" || rawStatus === "error") {
           this.activeTools.delete(toolId);
-          this.emitTool(toolId, title, "failed", kind);
+          this.emitTool(toolId, title, "failed", toolKind);
           this.emitStatus(null);
         } else if (
           rawStatus === "completed" ||
@@ -337,13 +569,13 @@ export class GrodexAgent {
           rawStatus === "done"
         ) {
           this.activeTools.delete(toolId);
-          this.emitTool(toolId, title, "completed", kind);
-          if (this.activeTools.size === 0) {
+          this.emitTool(toolId, title, "completed", toolKind);
+          if (this.activeTools.size === 0 && this.activeSubagents.size === 0) {
             this.emitStatus(null);
           }
         } else if (title) {
           this.activeTools.set(toolId, title);
-          this.emitTool(toolId, title, "running", kind);
+          this.emitTool(toolId, title, "running", toolKind);
           this.emitActivity(
             `Using ${title.slice(0, 60)}…`,
             "tool"
@@ -362,5 +594,7 @@ export class GrodexAgent {
     this.providerSessionId = "";
     this.domainSessionId = "";
     this.promptInFlight = false;
+    this.childSessionIds.clear();
+    this.activeSubagents.clear();
   }
 }

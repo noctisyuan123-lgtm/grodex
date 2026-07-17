@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { AgentActivityStrip } from "./AgentActivityStrip";
+import { AgentActivityStrip, WorkingPill } from "./AgentActivityStrip";
 import { ChatTranscript } from "./ChatTranscript";
+import {
+  collectActiveSubagentItems,
+  countActiveSubagents,
+} from "./subagentProcess";
 import { useChatSession } from "./useChatSession";
 
 export function App() {
@@ -17,6 +21,8 @@ export function App() {
     settledTools,
     statusText,
     processLine,
+    subagents,
+    subagentModel,
     busy,
     error,
     connected,
@@ -28,6 +34,19 @@ export function App() {
   } = useChatSession();
 
   const [draft, setDraft] = useState("");
+
+  const activeSubagentCount = countActiveSubagents(
+    tools,
+    subagents,
+    subagentModel
+  );
+  const workingItems = collectActiveSubagentItems(
+    tools,
+    subagents,
+    subagentModel,
+    statusText
+  );
+  const showWorkingPill = activeSubagentCount > 0;
 
   const submit = () => {
     const text = draft;
@@ -137,9 +156,16 @@ export function App() {
             tools={tools}
             liveTools={liveTools}
             settledTools={settledTools}
+            subagents={subagents}
+            subagentModel={subagentModel}
             statusText={statusText}
+            processLine={processLine}
             busy={busy}
           />
+
+          {showWorkingPill ? (
+            <WorkingPill count={activeSubagentCount} runningItems={workingItems} />
+          ) : null}
 
           <AgentActivityStrip
             status={statusText}

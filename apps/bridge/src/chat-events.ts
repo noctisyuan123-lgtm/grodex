@@ -20,6 +20,24 @@ export type ChatEvent =
       /** Live process outline (tool name, thinking, etc.) */
       text: string;
       kind?: "thinking" | "tool" | "status";
+      /** When the line comes from a nested subagent session */
+      agentKind?: "main" | "subagent";
+      /** Effective model slug for nested work (WorkingPill / task cards) */
+      subagentModel?: string;
+      at: string;
+    }
+  | {
+      type: "subagent";
+      /** Same as Core `subagent_id` / child session id */
+      subagentId: string;
+      childSessionId?: string;
+      status: "spawned" | "running" | "completed" | "failed" | "cancelled";
+      /** Short task description from Core */
+      title: string;
+      subagentType?: string;
+      model?: string;
+      /** Progress / live outline (may be empty until Core emits progress) */
+      activityLine?: string;
       at: string;
     }
   | { type: "error"; message: string; at: string };

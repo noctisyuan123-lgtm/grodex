@@ -143,6 +143,7 @@ async function main(): Promise<void> {
       gotUser: events.some((e) => e.type === "user"),
       gotTool: events.some((e) => e.type === "tool"),
       gotActivity: events.some((e) => e.type === "activity"),
+      gotSubagent: events.some((e) => e.type === "subagent"),
       lastError: events.find((e) => e.type === "error")?.message ?? null,
     };
 
