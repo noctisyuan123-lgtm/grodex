@@ -30,12 +30,12 @@ UI materials (not the Core host): [`noctisyuan123-lgtm/agent-pane`](https://gith
 
 ---
 
-## Status (G0)
+## Status
 
 | Phase | Outcome |
 |-------|---------|
-| **G0** | This fork + product README |
-| **G1** | CLI builds & runs from this tree; resume documented |
+| **G0** | Done — this fork + product README |
+| **G1** | Done — CLI `cargo build --release`; surface notes in `docs/G1-*.md` |
 | **G2** | Desktop skeleton in-tree; start/attach one Core session |
 | **G3** | Port agent-pane chat + tool timeline; same-UUID resume from Desktop |
 | **G4** | Drop digest-resume; upstream sync playbook |
@@ -48,17 +48,21 @@ Upstream sync: occasional; divergence is accepted for this product fork.
 
 ## Build (CLI / upstream harness)
 
-Same toolchain notes as upstream: Rust (see `rust-toolchain.toml`), [DotSlash](https://dotslash-cli.com) on `PATH` for hermetic `bin/protoc`, then:
+Same toolchain notes as upstream: Rust (see `rust-toolchain.toml`), [DotSlash](https://dotslash-cli.com) on `PATH` for hermetic `bin/protoc` (PATH `protoc` works as fallback), then:
 
 ```sh
+# If git deps fail through a dead local proxy:
+export CARGO_NET_GIT_FETCH_WITH_CLI=true NO_PROXY='*' no_proxy='*'
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+
 cargo check -p xai-grok-pager-bin
-cargo run -p xai-grok-pager-bin
 cargo build -p xai-grok-pager-bin --release
+# → target/release/xai-grok-pager   (clap name: grok; product rename → grodex later)
 ```
 
-Official installs ship the binary as `grok`; this fork’s target CLI name is **`grodex`** (rename lands in a later phase).
+Resume / ACP flags: [`docs/G1-cli-surface.md`](docs/G1-cli-surface.md). Build log: [`docs/G1-build-notes.md`](docs/G1-build-notes.md).
 
-Desktop is **not in tree yet** (starts G2).
+Desktop lands in **G2** under `apps/` (materials from agent-pane).
 
 ---
 
