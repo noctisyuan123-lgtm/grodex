@@ -12,11 +12,11 @@ import {
   type GrokSessionEntry,
   type SessionInfo,
 } from "./api";
+import type { ToolRow } from "./ToolTimeline";
 
 export type ChatMessage =
   | { id: string; role: "user"; text: string }
-  | { id: string; role: "assistant"; text: string; live?: boolean }
-  | { id: string; role: "tool"; text: string };
+  | { id: string; role: "assistant"; text: string; live?: boolean };
 
 function upsertAssistant(
   messages: ChatMessage[],
@@ -33,6 +33,28 @@ function upsertAssistant(
   return [...messages, { id, role: "assistant", text, live }];
 }
 
+function upsertTool(tools: ToolRow[], event: Extract<ChatEvent, { type: "tool" }>): ToolRow[] {
+  const status =
+    event.status ??
+    (event.phase === "start"
+      ? "running"
+      : event.phase === "end"
+        ? "completed"
+        : "running");
+  const idx = tools.findIndex((t) => t.toolId === event.toolId);
+  const row: ToolRow = {
+    toolId: event.toolId,
+    label: event.title,
+    status,
+  };
+  if (idx >= 0) {
+    const next = [...tools];
+    next[idx] = row;
+    return next;
+  }
+  return [...tools, row];
+}
+
 export function useChatSession() {
   const [bridgeUp, setBridgeUp] = useState<boolean | null>(null);
   const [bin, setBin] = useState("");
@@ -41,7 +63,9 @@ export function useChatSession() {
   const [recentSessions, setRecentSessions] = useState<GrokSessionEntry[]>([]);
   const [sessionIdInput, setSessionIdInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [tools, setTools] = useState<ToolRow[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);
+  const [processLine, setProcessLine] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +114,8 @@ export function useChatSession() {
             ...m,
             { id: `u-${event.at}`, role: "user", text: event.text },
           ]);
+          setTools([]);
+          setProcessLine(null);
           setBusy(true);
           break;
         case "assistant_chunk":
@@ -115,25 +141,24 @@ export function useChatSession() {
           liveAssistantId.current = `a-${Date.now()}`;
           setBusy(false);
           setStatusText(null);
+          setProcessLine(null);
           break;
         case "status":
           setStatusText(event.text);
           break;
+        case "activity":
+          setProcessLine(event.text);
+          break;
         case "tool":
-          if (event.phase === "start") {
-            setMessages((m) => [
-              ...m,
-              {
-                id: `tool-${event.toolId}`,
-                role: "tool",
-                text: event.title,
-              },
-            ]);
+          setTools((t) => upsertTool(t, event));
+          if (event.status === "running") {
+            setProcessLine(event.title);
           }
           break;
         case "error":
           setError(event.message);
           setBusy(false);
+          setProcessLine(null);
           break;
         default:
           break;
@@ -146,6 +171,8 @@ export function useChatSession() {
     setBusy(true);
     setError(null);
     setMessages([]);
+    setTools([]);
+    setProcessLine(null);
     assistantBuf.current = "";
     liveAssistantId.current = `a-${Date.now()}`;
     try {
@@ -172,6 +199,8 @@ export function useChatSession() {
       await disconnectSession();
       setSession(null);
       setMessages([]);
+      setTools([]);
+      setProcessLine(null);
       await refresh();
     } finally {
       setBusy(false);
@@ -183,6 +212,8 @@ export function useChatSession() {
     if (!trimmed || !session) return;
     setError(null);
     setBusy(true);
+    setTools([]);
+    setProcessLine(null);
     try {
       await promptSession(trimmed);
     } catch (e) {
@@ -195,9 +226,12 @@ export function useChatSession() {
     await cancelPrompt();
     setBusy(false);
     setStatusText(null);
+    setProcessLine(null);
   };
 
   const connected = status.state === "connected" && session;
+  const liveTools = tools.filter((t) => t.status === "running");
+  const settledTools = tools.filter((t) => t.status !== "running");
 
   return {
     bridgeUp,
@@ -208,7 +242,11 @@ export function useChatSession() {
     sessionIdInput,
     setSessionIdInput,
     messages,
+    tools,
+    liveTools,
+    settledTools,
     statusText,
+    processLine,
     busy,
     error,
     connected,

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
+import { ToolTimeline } from "./ToolTimeline";
 import type { ChatMessage } from "./useChatSession";
+import type { ToolRow } from "./ToolTimeline";
 
 function renderMinimalMarkdown(text: string): string {
   let html = text
@@ -14,22 +16,37 @@ function renderMinimalMarkdown(text: string): string {
 
 type Props = {
   messages: ChatMessage[];
+  tools: ToolRow[];
+  liveTools: ToolRow[];
+  settledTools: ToolRow[];
   statusText: string | null;
+  busy: boolean;
 };
 
-export function ChatTranscript({ messages, statusText }: Props) {
+export function ChatTranscript({
+  messages,
+  tools,
+  liveTools,
+  settledTools,
+  statusText,
+  busy,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, statusText]);
+  }, [messages, tools, statusText, liveTools]);
+
+  const showEmpty =
+    messages.length === 0 && tools.length === 0 && !statusText && !busy;
 
   return (
     <div className="chat-scroll">
-      {messages.length === 0 ? (
+      {showEmpty ? (
         <p className="chat-empty">
-          Connect a Core session, then send a message. Same-UUID resume uses{" "}
-          <code>session/load</code> when you pass a known id.
+          Connect a Core session, then send a message. Tool and status events
+          render even when assistant text is blocked (e.g. auth/balance). Same-UUID
+          resume uses <code>session/load</code> when you pass a known id.
         </p>
       ) : null}
 
@@ -40,8 +57,6 @@ export function ChatTranscript({ messages, statusText }: Props) {
         >
           {m.role === "user" ? (
             <div className="bubble user">{m.text}</div>
-          ) : m.role === "tool" ? (
-            <div className="tool-chip">⚙ {m.text}</div>
           ) : (
             <div
               className="bubble assistant"
@@ -53,7 +68,22 @@ export function ChatTranscript({ messages, statusText }: Props) {
         </div>
       ))}
 
-      {statusText ? <div className="status-line">{statusText}</div> : null}
+      {liveTools.length > 0 ? (
+        <div className="chat-process-block">
+          <ToolTimeline tools={liveTools} rollLabels />
+        </div>
+      ) : null}
+
+      {settledTools.length > 0 ? (
+        <div className="chat-process-block">
+          <ToolTimeline tools={settledTools} />
+        </div>
+      ) : null}
+
+      {busy && liveTools.length === 0 && statusText ? (
+        <div className="status-line">{statusText}</div>
+      ) : null}
+
       <div ref={bottomRef} />
     </div>
   );

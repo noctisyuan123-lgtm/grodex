@@ -29,7 +29,22 @@ export type ChatEvent =
   | { type: "assistant_chunk"; text: string; at: string }
   | { type: "assistant_done"; at: string }
   | { type: "status"; text: string | null; at: string }
-  | { type: "tool"; toolId: string; title: string; phase: "start" | "end"; at: string }
+  | {
+      type: "tool";
+      toolId: string;
+      title: string;
+      status: "running" | "completed" | "failed";
+      kind?: string;
+      /** @deprecated use status */
+      phase?: "start" | "end";
+      at: string;
+    }
+  | {
+      type: "activity";
+      text: string;
+      kind?: "thinking" | "tool" | "status";
+      at: string;
+    }
   | { type: "error"; message: string; at: string }
   | { type: "connected"; at: string };
 

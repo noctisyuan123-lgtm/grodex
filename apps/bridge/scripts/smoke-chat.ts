@@ -141,6 +141,8 @@ async function main(): Promise<void> {
       gotAssistantChunk: events.some((e) => e.type === "assistant_chunk"),
       gotAssistantDone: events.some((e) => e.type === "assistant_done"),
       gotUser: events.some((e) => e.type === "user"),
+      gotTool: events.some((e) => e.type === "tool"),
+      gotActivity: events.some((e) => e.type === "activity"),
       lastError: events.find((e) => e.type === "error")?.message ?? null,
     };
 

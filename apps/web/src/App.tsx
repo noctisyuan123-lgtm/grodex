@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AgentActivityStrip } from "./AgentActivityStrip";
 import { ChatTranscript } from "./ChatTranscript";
 import { useChatSession } from "./useChatSession";
 
@@ -11,7 +12,11 @@ export function App() {
     sessionIdInput,
     setSessionIdInput,
     messages,
+    tools,
+    liveTools,
+    settledTools,
     statusText,
+    processLine,
     busy,
     error,
     connected,
@@ -127,7 +132,20 @@ export function App() {
         </aside>
 
         <main className="chat-main">
-          <ChatTranscript messages={messages} statusText={statusText} />
+          <ChatTranscript
+            messages={messages}
+            tools={tools}
+            liveTools={liveTools}
+            settledTools={settledTools}
+            statusText={statusText}
+            busy={busy}
+          />
+
+          <AgentActivityStrip
+            status={statusText}
+            processLine={processLine}
+            busy={busy}
+          />
 
           <div className="composer">
             <textarea

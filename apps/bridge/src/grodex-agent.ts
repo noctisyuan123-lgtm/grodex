@@ -32,6 +32,7 @@ export class GrodexAgent {
   private handlers: EventHandler[] = [];
   private promptInFlight = false;
   private turnCancelled = false;
+  private activeTools = new Map<string, string>();
 
   onEvent(handler: EventHandler): () => void {
     this.handlers.push(handler);
@@ -52,6 +53,33 @@ export class GrodexAgent {
 
   private emitStatus(text: string | null): void {
     this.emit({ type: "status", text, at: nowIso() });
+  }
+
+  private emitActivity(
+    text: string,
+    kind: "thinking" | "tool" | "status" = "status"
+  ): void {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    this.emit({ type: "activity", text: trimmed, kind, at: nowIso() });
+  }
+
+  private emitTool(
+    toolId: string,
+    title: string,
+    status: "running" | "completed" | "failed",
+    kind?: string
+  ): void {
+    const phase = status === "running" ? "start" : "end";
+    this.emit({
+      type: "tool",
+      toolId,
+      title,
+      status,
+      kind,
+      phase,
+      at: nowIso(),
+    });
   }
 
   async connect(opts: {
@@ -174,8 +202,10 @@ export class GrodexAgent {
 
     this.turnCancelled = false;
     this.promptInFlight = true;
+    this.activeTools.clear();
     this.emit({ type: "user", text: trimmed, at: nowIso() });
     this.emitStatus("Waiting for model…");
+    this.emitActivity("Waiting for model…", "status");
 
     const PROMPT_TIMEOUT_MS = 30 * 60_000;
     try {
@@ -188,10 +218,12 @@ export class GrodexAgent {
         PROMPT_TIMEOUT_MS
       );
       this.promptInFlight = false;
+      this.activeTools.clear();
       this.emitStatus(null);
       this.emit({ type: "assistant_done", at: nowIso() });
     } catch (err) {
       this.promptInFlight = false;
+      this.activeTools.clear();
       this.emitStatus(null);
       if (this.turnCancelled) {
         this.emit({ type: "assistant_done", at: nowIso() });
@@ -261,28 +293,61 @@ export class GrodexAgent {
         }
         break;
       }
-      case "agent_thought_chunk":
+      case "agent_thought_chunk": {
+        const content = update.content as { text?: string } | undefined;
+        const thought =
+          content?.text?.trim() ??
+          (typeof update.text === "string" ? update.text.trim() : "");
         this.emitStatus("Thinking…");
+        this.emitActivity(thought ? "Thinking…" : "Thinking…", "thinking");
         break;
+      }
       case "tool_call": {
         const toolId = String(update.toolCallId ?? update.id ?? randomUUID());
         const title = String(update.title ?? update.kind ?? "tool");
-        this.emit({ type: "tool", toolId, title, phase: "start", at });
+        const kind = String(update.kind ?? "other");
+        this.activeTools.set(toolId, title);
+        this.emitTool(toolId, title, "running", kind);
         this.emitStatus(`Running ${title}…`);
+        this.emitActivity(
+          title.startsWith("Execute") || kind === "execute"
+            ? title.slice(0, 72) + (title.length > 72 ? "…" : "")
+            : `Using ${title.slice(0, 60)}…`,
+          "tool"
+        );
         break;
       }
       case "tool_call_update": {
-        const status = String(update.status ?? "");
-        if (status === "completed" || status === "failed") {
-          const toolId = String(update.toolCallId ?? update.id ?? "tool");
-          const title = String(update.title ?? update.kind ?? "tool");
-          this.emit({
-            type: "tool",
-            toolId,
-            title,
-            phase: "end",
-            at,
-          });
+        const toolId = String(update.toolCallId ?? update.id ?? "tool");
+        const rawStatus = String(update.status ?? "").toLowerCase();
+        const title =
+          update.title != null
+            ? String(update.title)
+            : this.activeTools.get(toolId) ?? "tool";
+        const kind =
+          update.kind != null ? String(update.kind) : undefined;
+
+        if (rawStatus === "failed" || rawStatus === "error") {
+          this.activeTools.delete(toolId);
+          this.emitTool(toolId, title, "failed", kind);
+          this.emitStatus(null);
+        } else if (
+          rawStatus === "completed" ||
+          rawStatus === "success" ||
+          rawStatus === "done"
+        ) {
+          this.activeTools.delete(toolId);
+          this.emitTool(toolId, title, "completed", kind);
+          if (this.activeTools.size === 0) {
+            this.emitStatus(null);
+          }
+        } else if (title) {
+          this.activeTools.set(toolId, title);
+          this.emitTool(toolId, title, "running", kind);
+          this.emitActivity(
+            `Using ${title.slice(0, 60)}…`,
+            "tool"
+          );
         }
         break;
       }
