@@ -37,7 +37,7 @@ UI materials (not the Core host): [`noctisyuan123-lgtm/agent-pane`](https://gith
 | **G0** | Done — this fork + product README |
 | **G1** | Done — CLI `cargo build --release`; surface notes in `docs/G1-*.md` |
 | **G2** | Done — Desktop skeleton under `apps/`; see `docs/G2-desktop-skeleton.md` |
-| **G3** | **Partial — chat + timeline + subagent + live process** (`docs/G3-chat-slice.md`, `docs/G3b-timeline-slice.md`, `docs/G3c-subagent-slice.md`, `docs/G3d-liveprocess-load.md`): connect + prompt + SSE + TextRoll/tool timeline + subagent cards/WorkingPill + LiveProcessStack/RunningDock + `session/load` smoke; full turn segmentation still deferred |
+| **G3** | **Partial — chat + timeline + subagent + live process + history hydrate** (`docs/G3-chat-slice.md`, `docs/G3b-timeline-slice.md`, `docs/G3c-subagent-slice.md`, `docs/G3d-liveprocess-load.md`, `docs/G3e-history-hydrate.md`): connect + prompt + SSE + TextRoll/tool timeline + subagent cards/WorkingPill + LiveProcessStack/RunningDock + `session/load` smoke + transcript hydrate on resume; full turn segmentation still deferred |
 | **G4** | Drop digest-resume; upstream sync playbook |
 
 v1 data/auth: keep **`~/.grok`** for compatibility (branding is the app/CLI name).
@@ -62,7 +62,7 @@ cargo build -p xai-grok-pager-bin --release
 
 Resume / ACP flags: [`docs/G1-cli-surface.md`](docs/G1-cli-surface.md). Build log: [`docs/G1-build-notes.md`](docs/G1-build-notes.md).
 
-Desktop (G2) lives under `apps/` — run notes in [`docs/G2-desktop-skeleton.md`](docs/G2-desktop-skeleton.md). G3 chat: [`docs/G3-chat-slice.md`](docs/G3-chat-slice.md). G3b timeline/activity: [`docs/G3b-timeline-slice.md`](docs/G3b-timeline-slice.md). G3c subagents: [`docs/G3c-subagent-slice.md`](docs/G3c-subagent-slice.md). G3d live process + load smoke: [`docs/G3d-liveprocess-load.md`](docs/G3d-liveprocess-load.md).
+Desktop (G2) lives under `apps/` — run notes in [`docs/G2-desktop-skeleton.md`](docs/G2-desktop-skeleton.md). G3 chat: [`docs/G3-chat-slice.md`](docs/G3-chat-slice.md). G3b timeline/activity: [`docs/G3b-timeline-slice.md`](docs/G3b-timeline-slice.md). G3c subagents: [`docs/G3c-subagent-slice.md`](docs/G3c-subagent-slice.md). G3d live process + load smoke: [`docs/G3d-liveprocess-load.md`](docs/G3d-liveprocess-load.md). G3e history hydrate: [`docs/G3e-history-hydrate.md`](docs/G3e-history-hydrate.md).
 
 ---
 

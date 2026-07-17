@@ -1,6 +1,8 @@
 import type { AgentSessionInfo } from "./grodex-agent.js";
 import { GrodexAgent } from "./grodex-agent.js";
 import { broadcastChatEvent } from "./event-hub.js";
+import { chatHistoryToEvents } from "./session-history.js";
+import { nowIso } from "./chat-events.js";
 
 export type BridgeStatus =
   | { state: "idle" }
@@ -42,9 +44,42 @@ export async function connectSession(opts: {
 
   try {
     const session = await next.connect(opts);
+    let hydrated = session;
+
+    if (
+      session.attachMode === "load" &&
+      (session.hydrateUserTurns ?? 0) === 0 &&
+      opts.sessionId
+    ) {
+      try {
+        const { events, userTurns } = chatHistoryToEvents(opts.sessionId);
+        for (const event of events) {
+          broadcastChatEvent(event);
+        }
+        if (userTurns > 0) {
+          broadcastChatEvent({
+            type: "history_hydrate_done",
+            userTurns,
+            source: "chat_history",
+            at: nowIso(),
+          });
+          hydrated = {
+            ...session,
+            hydrateUserTurns: userTurns,
+            hydrateSource: "chat_history",
+          };
+        }
+      } catch (err) {
+        console.warn(
+          "[session-store] chat_history fallback skipped:",
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
     agent = next;
-    status = { state: "connected", session };
-    return session;
+    status = { state: "connected", session: hydrated };
+    return hydrated;
   } catch (err) {
     unsubEvents?.();
     unsubEvents = null;

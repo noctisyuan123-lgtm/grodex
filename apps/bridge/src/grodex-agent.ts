@@ -11,6 +11,9 @@ export type AgentSessionInfo = {
   attachMode: SessionAttachMode;
   cwd: string;
   bin: string;
+  /** User turns visible after load hydrate (0 when attachMode=new) */
+  hydrateUserTurns?: number;
+  hydrateSource?: "acp_replay" | "chat_history" | "none";
 };
 
 type EventHandler = (event: ChatEvent) => void;
@@ -46,6 +49,12 @@ export class GrodexAgent {
       activityLine?: string;
     }
   >();
+  /** True while session/load is replaying updates.jsonl into session/update */
+  private replaying = false;
+  private replayAssistantBuf = "";
+  private replayTurn = 0;
+  private replayUserTurns = 0;
+  private replayLastNotifyAt = 0;
 
   onEvent(handler: EventHandler): () => void {
     this.handlers.push(handler);
@@ -164,6 +173,57 @@ export class GrodexAgent {
     });
   }
 
+  private noteReplayActivity(): void {
+    if (this.replaying) {
+      this.replayLastNotifyAt = Date.now();
+    }
+  }
+
+  private replayAssistantId(): string {
+    return `a-replay-${this.replayTurn}`;
+  }
+
+  private finalizeReplayAssistant(): void {
+    const text = this.replayAssistantBuf.trim();
+    if (!text) return;
+    this.emit({
+      type: "assistant_chunk",
+      text,
+      messageId: this.replayAssistantId(),
+      at: nowIso(),
+    });
+    this.emit({ type: "assistant_done", at: nowIso() });
+    this.replayAssistantBuf = "";
+  }
+
+  private async waitForReplayDrain(maxMs = 500): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      const idle = Date.now() - this.replayLastNotifyAt;
+      if (this.replayLastNotifyAt === 0 || idle >= 80) return;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+  }
+
+  private extractChunkText(update: Record<string, unknown>): string {
+    const content = update.content as { text?: string } | undefined;
+    return (
+      content?.text ??
+      (typeof update.text === "string" ? update.text : "") ??
+      ""
+    );
+  }
+
+  private isReplayUserNoise(text: string): boolean {
+    const t = text.trim();
+    if (!t) return true;
+    if (t.startsWith("<local-command")) return true;
+    if (t.startsWith("<command-name>") || t.startsWith("<command-message>")) {
+      return true;
+    }
+    return false;
+  }
+
   async connect(opts: {
     cwd: string;
     sessionId?: string;
@@ -232,22 +292,40 @@ export class GrodexAgent {
     );
 
     if (opts.sessionId) {
+      this.replaying = true;
+      this.replayAssistantBuf = "";
+      this.replayTurn = 0;
+      this.replayUserTurns = 0;
+      this.replayLastNotifyAt = 0;
       try {
         const loaded = (await this.transport.send(
           "session/load",
           { sessionId: opts.sessionId, cwd: opts.cwd, mcpServers: [] },
-          30_000
+          120_000
         )) as { sessionId?: string };
         const sessionId = loaded.sessionId ?? opts.sessionId;
         this.providerSessionId = sessionId;
         this.domainSessionId = sessionId;
+        await this.waitForReplayDrain();
+        this.finalizeReplayAssistant();
+        this.replaying = false;
+        this.emit({
+          type: "history_hydrate_done",
+          userTurns: this.replayUserTurns,
+          source: "acp_replay",
+          at: nowIso(),
+        });
         return {
           sessionId,
           attachMode: "load",
           cwd: opts.cwd,
           bin,
+          hydrateUserTurns: this.replayUserTurns,
+          hydrateSource: this.replayUserTurns > 0 ? "acp_replay" : "none",
         };
       } catch (err) {
+        this.replaying = false;
+        this.replayAssistantBuf = "";
         console.warn(
           "[grodex-agent] session/load failed — falling back to session/new:",
           err instanceof Error ? err.message : String(err)
@@ -353,10 +431,13 @@ export class GrodexAgent {
       const wire = String(p.sessionId ?? "").trim();
       if (!this.isKnownSession(wire)) return;
       const update = (p.update ?? p) as Record<string, unknown>;
+      const meta = p._meta as Record<string, unknown> | undefined;
+      const isReplay = Boolean(meta?.isReplay) || this.replaying;
       const fromChild = Boolean(
         wire && this.providerSessionId && wire !== this.providerSessionId
       );
-      this.mapSessionUpdate(update, { fromChild, childSessionId: wire });
+      this.noteReplayActivity();
+      this.mapSessionUpdate(update, { fromChild, childSessionId: wire, isReplay });
       return;
     }
 
@@ -488,12 +569,17 @@ export class GrodexAgent {
 
   private mapSessionUpdate(
     update: Record<string, unknown>,
-    ctx: { fromChild?: boolean; childSessionId?: string } = {}
+    ctx: {
+      fromChild?: boolean;
+      childSessionId?: string;
+      isReplay?: boolean;
+    } = {}
   ): void {
     if (this.turnCancelled) return;
 
     const kind = String(update.sessionUpdate ?? update.type ?? "");
     const at = nowIso();
+    const isReplay = Boolean(ctx.isReplay);
 
     // Subagent lifecycle may also arrive on session/update (jsonl replay path).
     if (
@@ -501,7 +587,7 @@ export class GrodexAgent {
       kind === "subagent_progress" ||
       kind === "subagent_finished"
     ) {
-      this.mapSubagentUpdate(kind, update);
+      if (!isReplay) this.mapSubagentUpdate(kind, update);
       return;
     }
 
@@ -516,13 +602,32 @@ export class GrodexAgent {
       : undefined;
 
     switch (kind) {
+      case "user_message_chunk": {
+        if (ctx.fromChild || !isReplay) break;
+        const text = this.extractChunkText(update).trim();
+        if (this.isReplayUserNoise(text)) break;
+        this.finalizeReplayAssistant();
+        this.replayTurn += 1;
+        this.replayUserTurns += 1;
+        this.replayAssistantBuf = "";
+        this.emit({ type: "user", text, at });
+        break;
+      }
       case "agent_message_chunk": {
         if (ctx.fromChild) break;
-        const content = update.content as { text?: string } | undefined;
-        const text = content?.text ?? (update.text as string) ?? "";
-        if (text) {
-          this.emit({ type: "assistant_chunk", text, at });
+        const text = this.extractChunkText(update);
+        if (!text) break;
+        if (isReplay) {
+          this.replayAssistantBuf += text;
+          this.emit({
+            type: "assistant_chunk",
+            text: this.replayAssistantBuf,
+            messageId: this.replayAssistantId(),
+            at,
+          });
+          break;
         }
+        this.emit({ type: "assistant_chunk", text, at });
         break;
       }
       case "agent_thought_chunk": {
@@ -555,6 +660,10 @@ export class GrodexAgent {
         const toolId = String(update.toolCallId ?? update.id ?? randomUUID());
         const title = String(update.title ?? update.kind ?? "tool");
         const toolKind = String(update.kind ?? "other");
+        if (isReplay) {
+          this.emitTool(toolId, title, "completed", toolKind);
+          break;
+        }
         if (ctx.fromChild && nestedSubagentId && nestedRow) {
           const activityLine = `Using ${title.slice(0, 60)}…`;
           this.activeSubagents.set(nestedSubagentId, {
@@ -593,6 +702,15 @@ export class GrodexAgent {
             : this.activeTools.get(toolId) ?? "tool";
         const toolKind =
           update.kind != null ? String(update.kind) : undefined;
+
+        if (isReplay) {
+          const status =
+            rawStatus === "failed" || rawStatus === "error"
+              ? "failed"
+              : "completed";
+          this.emitTool(toolId, title, status, toolKind);
+          break;
+        }
 
         if (ctx.fromChild && nestedSubagentId && nestedRow) {
           const activityLine =
@@ -646,6 +764,8 @@ export class GrodexAgent {
     this.providerSessionId = "";
     this.domainSessionId = "";
     this.promptInFlight = false;
+    this.replaying = false;
+    this.replayAssistantBuf = "";
     this.childSessionIds.clear();
     this.activeSubagents.clear();
   }

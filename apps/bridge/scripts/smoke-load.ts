@@ -105,7 +105,12 @@ async function main(): Promise<void> {
     });
     const connectBody = (await connectRes.json()) as {
       ok?: boolean;
-      session?: { sessionId: string; attachMode: "load" | "new" };
+      session?: {
+        sessionId: string;
+        attachMode: "load" | "new";
+        hydrateUserTurns?: number;
+        hydrateSource?: string;
+      };
       error?: string;
     };
 
@@ -132,9 +137,24 @@ async function main(): Promise<void> {
       requestedSessionId: picked.sessionId,
       pickedFrom: picked.source,
       loadSucceeded: connectBody.session.attachMode === "load",
+      hydrateUserTurns: connectBody.session.hydrateUserTurns ?? 0,
+      hydrateSource: connectBody.session.hydrateSource ?? "none",
     };
 
-    console.log(JSON.stringify(out, null, 2));
+    let historyApiUserTurns = 0;
+    if (connectBody.session.attachMode === "load") {
+      try {
+        const histRes = await fetch(
+          `${BASE}/api/session/history?sessionId=${encodeURIComponent(connectBody.session.sessionId)}`
+        );
+        const histBody = (await histRes.json()) as { userTurns?: number };
+        historyApiUserTurns = histBody.userTurns ?? 0;
+      } catch {
+        /* optional */
+      }
+    }
+
+    console.log(JSON.stringify({ ...out, historyApiUserTurns }, null, 2));
 
     await fetch(`${BASE}/api/session/disconnect`, { method: "POST" });
   } finally {

@@ -8,6 +8,8 @@ export type SessionInfo = {
   attachMode: SessionAttachMode;
   cwd: string;
   bin: string;
+  hydrateUserTurns?: number;
+  hydrateSource?: "acp_replay" | "chat_history" | "none";
 };
 
 export type BridgeStatus =
@@ -26,8 +28,19 @@ export type GrokSessionEntry = {
 
 export type ChatEvent =
   | { type: "user"; text: string; at: string }
-  | { type: "assistant_chunk"; text: string; at: string }
+  | {
+      type: "assistant_chunk";
+      text: string;
+      at: string;
+      messageId?: string;
+    }
   | { type: "assistant_done"; at: string }
+  | {
+      type: "history_hydrate_done";
+      userTurns: number;
+      source: "acp_replay" | "chat_history";
+      at: string;
+    }
   | { type: "status"; text: string | null; at: string }
   | {
       type: "tool";
@@ -111,6 +124,32 @@ export async function fetchRecentSessions(opts?: {
   if (!res.ok) throw new Error(`sessions ${res.status}`);
   const data = (await res.json()) as { sessions?: GrokSessionEntry[] };
   return data.sessions ?? [];
+}
+
+export async function fetchSessionHistory(sessionId: string): Promise<{
+  ok: boolean;
+  userTurns: number;
+  events: ChatEvent[];
+  source: "chat_history";
+}> {
+  const params = new URLSearchParams({ sessionId });
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/session/history?${params}`);
+  const data = (await res.json()) as {
+    ok?: boolean;
+    userTurns?: number;
+    events?: ChatEvent[];
+    source?: "chat_history";
+    error?: string;
+  };
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? `history ${res.status}`);
+  }
+  return {
+    ok: true,
+    userTurns: data.userTurns ?? 0,
+    events: data.events ?? [],
+    source: "chat_history",
+  };
 }
 
 export async function connectSession(opts?: {

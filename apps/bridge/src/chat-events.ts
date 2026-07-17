@@ -1,8 +1,20 @@
 /** Minimal chat events streamed to the web client (G3 / G3b). */
 export type ChatEvent =
   | { type: "user"; text: string; at: string }
-  | { type: "assistant_chunk"; text: string; at: string }
+  | {
+      type: "assistant_chunk";
+      text: string;
+      at: string;
+      /** Stable id for replay / history hydrate (avoids collapsing turns) */
+      messageId?: string;
+    }
   | { type: "assistant_done"; at: string }
+  | {
+      type: "history_hydrate_done";
+      userTurns: number;
+      source: "acp_replay" | "chat_history";
+      at: string;
+    }
   | { type: "status"; text: string | null; at: string }
   | {
       type: "tool";

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   cancelPrompt,
   connectSession,
   disconnectSession,
   fetchHealth,
   fetchRecentSessions,
+  fetchSessionHistory,
   openSessionStream,
   promptSession,
   type BridgeStatus,
@@ -90,6 +91,126 @@ function upsertSubagent(
   return [...rows, row];
 }
 
+function applyChatEvent(
+  event: ChatEvent,
+  ctx: {
+    liveAssistantId: { current: string };
+    assistantBuf: { current: string };
+    setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
+    setTools: Dispatch<SetStateAction<ToolRow[]>>;
+    setSubagents: Dispatch<SetStateAction<SubagentRow[]>>;
+    setSubagentModel: Dispatch<SetStateAction<string | null>>;
+    setProcessLine: Dispatch<SetStateAction<string | null>>;
+    setActivityPhase: Dispatch<SetStateAction<string | null>>;
+    setPermissionPending: Dispatch<SetStateAction<boolean>>;
+    setStatusText: Dispatch<SetStateAction<string | null>>;
+    setError: Dispatch<SetStateAction<string | null>>;
+    setBusy: Dispatch<SetStateAction<boolean>>;
+  }
+): void {
+  switch (event.type) {
+    case "user":
+      ctx.setMessages((m) => [
+        ...m,
+        { id: `u-${event.at}-${m.length}`, role: "user", text: event.text },
+      ]);
+      ctx.setTools([]);
+      ctx.setSubagents([]);
+      ctx.setSubagentModel(null);
+      ctx.setProcessLine(null);
+      ctx.setActivityPhase(null);
+      ctx.setPermissionPending(false);
+      ctx.setBusy(true);
+      break;
+    case "assistant_chunk": {
+      const msgId = event.messageId ?? ctx.liveAssistantId.current;
+      if (event.messageId) {
+        ctx.liveAssistantId.current = msgId;
+        ctx.assistantBuf.current = event.text;
+      } else {
+        ctx.assistantBuf.current += event.text;
+      }
+      ctx.setMessages((m) =>
+        upsertAssistant(
+          m,
+          msgId,
+          event.messageId ? event.text : ctx.assistantBuf.current,
+          true
+        )
+      );
+      break;
+    }
+    case "assistant_done":
+      ctx.setMessages((m) =>
+        m.map((msg) =>
+          msg.role === "assistant" && msg.live
+            ? { ...msg, live: false }
+            : msg
+        )
+      );
+      ctx.assistantBuf.current = "";
+      ctx.liveAssistantId.current = `a-${Date.now()}`;
+      ctx.setBusy(false);
+      ctx.setStatusText(null);
+      ctx.setProcessLine(null);
+      ctx.setActivityPhase(null);
+      ctx.setPermissionPending(false);
+      ctx.setSubagentModel(null);
+      break;
+    case "history_hydrate_done":
+      ctx.setBusy(false);
+      break;
+    case "status":
+      ctx.setStatusText(event.text);
+      break;
+    case "activity":
+      ctx.setProcessLine(event.text);
+      if (event.phase) ctx.setActivityPhase(event.phase);
+      if (event.agentKind === "subagent" && event.subagentModel?.trim()) {
+        ctx.setSubagentModel(event.subagentModel.trim());
+      }
+      break;
+    case "subagent":
+      ctx.setSubagents((rows) => upsertSubagent(rows, event));
+      if (event.model?.trim()) ctx.setSubagentModel(event.model.trim());
+      if (event.activityLine?.trim()) ctx.setProcessLine(event.activityLine);
+      if (
+        event.status === "completed" ||
+        event.status === "failed" ||
+        event.status === "cancelled"
+      ) {
+        ctx.setSubagents((rows) =>
+          rows.filter((r) => r.subagentId !== event.subagentId)
+        );
+      }
+      break;
+    case "permission":
+      ctx.setPermissionPending(event.status === "pending");
+      if (event.status === "pending") {
+        ctx.setActivityPhase("permission");
+        ctx.setStatusText(
+          event.tool ? `Permission: ${event.tool}` : "Waiting for permission…"
+        );
+      } else {
+        ctx.setPermissionPending(false);
+      }
+      break;
+    case "tool":
+      ctx.setTools((t) => upsertTool(t, event));
+      if (event.status === "running") {
+        ctx.setProcessLine(event.title);
+      }
+      break;
+    case "error":
+      ctx.setError(event.message);
+      ctx.setBusy(false);
+      ctx.setProcessLine(null);
+      break;
+    default:
+      break;
+  }
+}
+
 export function useChatSession() {
   const [bridgeUp, setBridgeUp] = useState<boolean | null>(null);
   const [bin, setBin] = useState("");
@@ -110,6 +231,46 @@ export function useChatSession() {
 
   const liveAssistantId = useRef("a-live");
   const assistantBuf = useRef("");
+  const messageCountRef = useRef(0);
+
+  useEffect(() => {
+    messageCountRef.current = messages.length;
+  }, [messages]);
+
+  const eventCtx = {
+    liveAssistantId,
+    assistantBuf,
+    setMessages,
+    setTools,
+    setSubagents,
+    setSubagentModel,
+    setProcessLine,
+    setActivityPhase,
+    setPermissionPending,
+    setStatusText,
+    setError,
+    setBusy,
+  };
+
+  const applyHistoryEvents = useCallback(
+    (events: ChatEvent[]) => {
+      for (const event of events) {
+        applyChatEvent(event, eventCtx);
+      }
+    },
+    [
+      setMessages,
+      setTools,
+      setSubagents,
+      setSubagentModel,
+      setProcessLine,
+      setActivityPhase,
+      setPermissionPending,
+      setStatusText,
+      setError,
+      setBusy,
+    ]
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -147,101 +308,10 @@ export function useChatSession() {
 
   useEffect(() => {
     const close = openSessionStream((event: ChatEvent) => {
-      switch (event.type) {
-        case "user":
-          setMessages((m) => [
-            ...m,
-            { id: `u-${event.at}`, role: "user", text: event.text },
-          ]);
-          setTools([]);
-          setSubagents([]);
-          setSubagentModel(null);
-          setProcessLine(null);
-          setActivityPhase(null);
-          setPermissionPending(false);
-          setBusy(true);
-          break;
-        case "assistant_chunk":
-          assistantBuf.current += event.text;
-          setMessages((m) =>
-            upsertAssistant(
-              m,
-              liveAssistantId.current,
-              assistantBuf.current,
-              true
-            )
-          );
-          break;
-        case "assistant_done":
-          setMessages((m) =>
-            m.map((msg) =>
-              msg.role === "assistant" && msg.live
-                ? { ...msg, live: false }
-                : msg
-            )
-          );
-          assistantBuf.current = "";
-          liveAssistantId.current = `a-${Date.now()}`;
-          setBusy(false);
-          setStatusText(null);
-          setProcessLine(null);
-          setActivityPhase(null);
-          setPermissionPending(false);
-          setSubagentModel(null);
-          break;
-        case "status":
-          setStatusText(event.text);
-          break;
-        case "activity":
-          setProcessLine(event.text);
-          if (event.phase) setActivityPhase(event.phase);
-          if (event.agentKind === "subagent" && event.subagentModel?.trim()) {
-            setSubagentModel(event.subagentModel.trim());
-          } else if (!event.subagentModel) {
-            /* keep last nested model until turn ends */
-          }
-          break;
-        case "subagent":
-          setSubagents((rows) => upsertSubagent(rows, event));
-          if (event.model?.trim()) setSubagentModel(event.model.trim());
-          if (event.activityLine?.trim()) setProcessLine(event.activityLine);
-          if (
-            event.status === "completed" ||
-            event.status === "failed" ||
-            event.status === "cancelled"
-          ) {
-            setSubagents((rows) =>
-              rows.filter((r) => r.subagentId !== event.subagentId)
-            );
-          }
-          break;
-        case "permission":
-          setPermissionPending(event.status === "pending");
-          if (event.status === "pending") {
-            setActivityPhase("permission");
-            setStatusText(
-              event.tool ? `Permission: ${event.tool}` : "Waiting for permission…"
-            );
-          } else {
-            setPermissionPending(false);
-          }
-          break;
-        case "tool":
-          setTools((t) => upsertTool(t, event));
-          if (event.status === "running") {
-            setProcessLine(event.title);
-          }
-          break;
-        case "error":
-          setError(event.message);
-          setBusy(false);
-          setProcessLine(null);
-          break;
-        default:
-          break;
-      }
+      applyChatEvent(event, eventCtx);
     });
     return close;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs + setState are stable
   }, []);
 
   const onConnect = async (sessionIdOverride?: string) => {
@@ -265,6 +335,27 @@ export function useChatSession() {
       setSession(result.session);
       setSessionIdInput(result.session.sessionId);
       setStatus({ state: "connected", session: result.session });
+
+      const hydratedTurns = result.session.hydrateUserTurns ?? 0;
+      if (result.session.attachMode === "load") {
+        try {
+          const hist = await fetchSessionHistory(result.session.sessionId);
+          const preferHistory =
+            hist.userTurns > hydratedTurns ||
+            (hist.userTurns > 0 && messageCountRef.current === 0);
+          if (preferHistory) {
+            setMessages([]);
+            setTools([]);
+            setSubagents([]);
+            assistantBuf.current = "";
+            liveAssistantId.current = `a-${Date.now()}`;
+            applyHistoryEvents(hist.events);
+          }
+        } catch {
+          /* optional fallback — bridge may have already hydrated via SSE */
+        }
+      }
+
       void refreshSessions(result.session.cwd);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

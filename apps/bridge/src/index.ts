@@ -15,6 +15,7 @@ import {
   addSseClient,
   removeSseClient,
 } from "./event-hub.js";
+import { chatHistoryToEvents } from "./session-history.js";
 import { nowIso } from "./chat-events.js";
 
 const PORT = Number(process.env.GRODEX_BRIDGE_PORT ?? 8790);
@@ -83,6 +84,30 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       sessions: listRecentSessions({ cwd, limit: Number.isFinite(limit) ? limit : 30 }),
     });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/session/history") {
+    const sessionId = url.searchParams.get("sessionId")?.trim();
+    if (!sessionId) {
+      json(res, 400, { ok: false, error: "sessionId required" });
+      return;
+    }
+    try {
+      const { events, userTurns } = chatHistoryToEvents(sessionId);
+      json(res, 200, {
+        ok: true,
+        sessionId,
+        userTurns,
+        source: "chat_history",
+        events,
+      });
+    } catch (err) {
+      json(res, 404, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return;
   }
 
