@@ -13,6 +13,7 @@
     "dev:web": "npm run dev -w @grodex/web",
     "build": "npm run build -w @grodex/bridge && npm run build -w @grodex/web",
     "desktop:dev": "npm run dev -w @grodex/desktop",
-    "smoke:acp": "npm run smoke:acp -w @grodex/bridge"
+    "smoke:acp": "npm run smoke:acp -w @grodex/bridge",
+    "smoke:chat": "npm run smoke:chat -w @grodex/bridge"
   }
 }

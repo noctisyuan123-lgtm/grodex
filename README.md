@@ -37,7 +37,7 @@ UI materials (not the Core host): [`noctisyuan123-lgtm/agent-pane`](https://gith
 | **G0** | Done — this fork + product README |
 | **G1** | Done — CLI `cargo build --release`; surface notes in `docs/G1-*.md` |
 | **G2** | Done — Desktop skeleton under `apps/`; see `docs/G2-desktop-skeleton.md` |
-| **G3** | Port agent-pane chat + tool timeline; same-UUID resume from Desktop |
+| **G3** | **Partial — chat slice landed** (`docs/G3-chat-slice.md`): connect + prompt + SSE stream + minimal UI; tool timeline / TextRoll / subagent cards deferred |
 | **G4** | Drop digest-resume; upstream sync playbook |
 
 v1 data/auth: keep **`~/.grok`** for compatibility (branding is the app/CLI name).
@@ -62,7 +62,7 @@ cargo build -p xai-grok-pager-bin --release
 
 Resume / ACP flags: [`docs/G1-cli-surface.md`](docs/G1-cli-surface.md). Build log: [`docs/G1-build-notes.md`](docs/G1-build-notes.md).
 
-Desktop (G2) lives under `apps/` — run notes in [`docs/G2-desktop-skeleton.md`](docs/G2-desktop-skeleton.md).
+Desktop (G2) lives under `apps/` — run notes in [`docs/G2-desktop-skeleton.md`](docs/G2-desktop-skeleton.md). G3 chat slice: [`docs/G3-chat-slice.md`](docs/G3-chat-slice.md).
 
 ---
 

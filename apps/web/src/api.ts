@@ -16,6 +16,23 @@ export type BridgeStatus =
   | { state: "connected"; session: SessionInfo }
   | { state: "error"; message: string };
 
+export type GrokSessionEntry = {
+  sessionId: string;
+  cwd: string;
+  title: string;
+  updatedAt: string;
+  numMessages?: number;
+};
+
+export type ChatEvent =
+  | { type: "user"; text: string; at: string }
+  | { type: "assistant_chunk"; text: string; at: string }
+  | { type: "assistant_done"; at: string }
+  | { type: "status"; text: string | null; at: string }
+  | { type: "tool"; toolId: string; title: string; phase: "start" | "end"; at: string }
+  | { type: "error"; message: string; at: string }
+  | { type: "connected"; at: string };
+
 export async function fetchHealth(): Promise<{
   ok: boolean;
   bin: string;
@@ -34,6 +51,22 @@ export async function fetchSessionStatus(): Promise<{
   const res = await fetch(`${DEFAULT_BRIDGE}/api/session/status`);
   if (!res.ok) throw new Error(`status ${res.status}`);
   return res.json();
+}
+
+export async function fetchRecentSessions(opts?: {
+  cwd?: string;
+  limit?: number;
+}): Promise<GrokSessionEntry[]> {
+  const params = new URLSearchParams();
+  if (opts?.cwd) params.set("cwd", opts.cwd);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  const res = await fetch(
+    `${DEFAULT_BRIDGE}/api/sessions${qs ? `?${qs}` : ""}`
+  );
+  if (!res.ok) throw new Error(`sessions ${res.status}`);
+  const data = (await res.json()) as { sessions?: GrokSessionEntry[] };
+  return data.sessions ?? [];
 }
 
 export async function connectSession(opts?: {
@@ -56,6 +89,47 @@ export async function connectSession(opts?: {
   return { ok: true, session: data.session };
 }
 
+export async function promptSession(text: string): Promise<void> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/session/prompt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const data = (await res.json()) as { ok?: boolean; error?: string };
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? `prompt failed (${res.status})`);
+  }
+}
+
+export async function cancelPrompt(): Promise<void> {
+  await fetch(`${DEFAULT_BRIDGE}/api/session/cancel`, { method: "POST" });
+}
+
 export async function disconnectSession(): Promise<void> {
   await fetch(`${DEFAULT_BRIDGE}/api/session/disconnect`, { method: "POST" });
+}
+
+export function openSessionStream(
+  onEvent: (event: ChatEvent) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const es = new EventSource(`${DEFAULT_BRIDGE}/api/session/stream`);
+
+  es.onmessage = (ev) => {
+    try {
+      onEvent(JSON.parse(ev.data) as ChatEvent);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  es.onerror = () => {
+    onError?.(new Error("SSE disconnected — bridge may be offline"));
+  };
+
+  return () => es.close();
+}
+
+export function bridgeBaseUrl(): string {
+  return DEFAULT_BRIDGE;
 }
