@@ -1,3 +1,7 @@
 /target
 **/*.rs.bk
 .DS_Store
+node_modules/
+apps/web/dist/
+apps/bridge/dist/
+apps/desktop/src-tauri/target/

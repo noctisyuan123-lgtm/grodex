@@ -1,0 +1,18 @@
+{
+  "name": "grodex-apps",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "bridge",
+    "web",
+    "desktop"
+  ],
+  "scripts": {
+    "dev": "npm run dev:bridge & npm run dev:web",
+    "dev:bridge": "npm run dev -w @grodex/bridge",
+    "dev:web": "npm run dev -w @grodex/web",
+    "build": "npm run build -w @grodex/bridge && npm run build -w @grodex/web",
+    "desktop:dev": "npm run dev -w @grodex/desktop",
+    "smoke:acp": "npm run smoke:acp -w @grodex/bridge"
+  }
+}

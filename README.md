@@ -36,7 +36,7 @@ UI materials (not the Core host): [`noctisyuan123-lgtm/agent-pane`](https://gith
 |-------|---------|
 | **G0** | Done — this fork + product README |
 | **G1** | Done — CLI `cargo build --release`; surface notes in `docs/G1-*.md` |
-| **G2** | Desktop skeleton in-tree; start/attach one Core session |
+| **G2** | Done — Desktop skeleton under `apps/`; see `docs/G2-desktop-skeleton.md` |
 | **G3** | Port agent-pane chat + tool timeline; same-UUID resume from Desktop |
 | **G4** | Drop digest-resume; upstream sync playbook |
 
@@ -62,7 +62,7 @@ cargo build -p xai-grok-pager-bin --release
 
 Resume / ACP flags: [`docs/G1-cli-surface.md`](docs/G1-cli-surface.md). Build log: [`docs/G1-build-notes.md`](docs/G1-build-notes.md).
 
-Desktop lands in **G2** under `apps/` (materials from agent-pane).
+Desktop (G2) lives under `apps/` — run notes in [`docs/G2-desktop-skeleton.md`](docs/G2-desktop-skeleton.md).
 
 ---
 

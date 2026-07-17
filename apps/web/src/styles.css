@@ -1,0 +1,173 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  background: #0b0d10;
+  color: #e8eaed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #1e2430;
+  background: #10141b;
+}
+
+.brand {
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.pill {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #2a3344;
+}
+
+.pill.ok {
+  color: #7dffb2;
+  border-color: #1f6b4a;
+  background: #0f2a1f;
+}
+
+.pill.warn {
+  color: #ffd27d;
+  border-color: #6b4f1f;
+  background: #2a2110;
+}
+
+.pill.bad {
+  color: #ff9a9a;
+  border-color: #6b1f1f;
+  background: #2a1010;
+}
+
+.panel {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.lede {
+  margin: 0 0 24px;
+  color: #9aa3b2;
+}
+
+.facts {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 24px;
+}
+
+.facts > div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #1e2430;
+  border-radius: 10px;
+  background: #10141b;
+}
+
+.facts dt {
+  margin: 0;
+  color: #9aa3b2;
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.mono {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.field span {
+  color: #9aa3b2;
+  font-size: 13px;
+}
+
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a3344;
+  background: #0b0d10;
+  color: inherit;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+button {
+  border: 1px solid #35507a;
+  background: #1a3a66;
+  color: #e8f0ff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: #2a3344;
+  color: #c8d0dc;
+}
+
+.error {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #2a1010;
+  border: 1px solid #6b1f1f;
+  color: #ffb4b4;
+  white-space: pre-wrap;
+}
