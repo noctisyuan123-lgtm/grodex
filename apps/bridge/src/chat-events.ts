@@ -20,10 +20,28 @@ export type ChatEvent =
       /** Live process outline (tool name, thinking, etc.) */
       text: string;
       kind?: "thinking" | "tool" | "status";
+      /** Cursor-aligned phase for RunningDock / LiveProcessStack */
+      phase?:
+        | "idle"
+        | "working"
+        | "thinking"
+        | "tool"
+        | "permission"
+        | "compact"
+        | "queue"
+        | "sleeping"
+        | "error";
       /** When the line comes from a nested subagent session */
       agentKind?: "main" | "subagent";
       /** Effective model slug for nested work (WorkingPill / task cards) */
       subagentModel?: string;
+      at: string;
+    }
+  | {
+      type: "permission";
+      /** Tool or action awaiting approval (auto-approved in G3d bridge) */
+      tool?: string;
+      status: "pending" | "resolved";
       at: string;
     }
   | {

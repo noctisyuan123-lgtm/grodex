@@ -106,7 +106,7 @@ body {
 
 .chat-main {
   display: grid;
-  grid-template-rows: 1fr auto auto auto;
+  grid-template-rows: 1fr auto auto auto auto;
   min-height: 0;
   background: var(--bg);
 }
@@ -377,6 +377,175 @@ body {
   max-width: 100%;
 }
 
+/* ── Live process stack (G3d) ── */
+.live-process-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.live-process-sealed-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.72;
+}
+
+.live-process-stage {
+  position: relative;
+  min-height: 1.4rem;
+  overflow: hidden;
+}
+
+.live-process-roll-line {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Running dock (composer-adjacent) ── */
+.running-dock {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(100%, 420px);
+  min-width: 0;
+  padding: 0 20px 6px;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 820px;
+  user-select: none;
+}
+
+.running-dock-dots {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.running-dock-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.running-dock-outline-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.running-dock-outline-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.running-dock-outline-btn:hover .running-dock-outline {
+  color: var(--text);
+}
+
+.running-dock-expand-chev {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+  transition: transform 0.12s ease;
+  line-height: 1;
+}
+
+.running-dock-expand-chev.open {
+  transform: rotate(0deg);
+}
+
+.running-dock-outline {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(232, 234, 237, 0.86);
+}
+
+.running-dock-outline.agent-activity-slide-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.running-dock-secondary {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.running-dock-detail-row {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.running-dock-detail {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.running-dock-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.running-dock-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.running-dock-kind {
+  flex-shrink: 0;
+  font-size: 10px;
+  text-transform: lowercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 1.5;
+}
+
+.running-dock-label {
+  color: var(--text);
+  min-width: 0;
+  word-break: break-word;
+}
+
+.running-dock-item-detail {
+  flex: 1 1 100%;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
 /* ── Tool timeline (simplified) ── */
 .tl {
   display: flex;
@@ -474,6 +643,150 @@ body {
     -webkit-text-fill-color: unset;
     background-image: none;
   }
+}
+
+/* Running shell / permission — above composer (agent-pane RunningDock parity) */
+.running-dock {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: min(100%, 420px);
+  min-width: 0;
+  padding: 2px 2px 0;
+  margin: 0 0 2px;
+  user-select: none;
+}
+
+.running-dock-dots {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.running-dock-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.running-dock-outline-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.running-dock-outline-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.running-dock-outline-btn:hover .running-dock-outline {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.running-dock-expand-chev {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  transform: rotate(-90deg);
+  transition: transform 0.12s ease;
+  line-height: 1;
+}
+
+.running-dock-expand-chev.open {
+  transform: rotate(0deg);
+}
+
+.running-dock-outline {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.86);
+  letter-spacing: 0.01em;
+}
+
+.running-dock-outline.agent-activity-slide-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.running-dock-secondary {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.running-dock-detail-row {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.running-dock-detail {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.running-dock-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.running-dock-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.running-dock-kind {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: lowercase;
+  color: rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 1.5;
+}
+
+.running-dock-label {
+  color: rgba(255, 255, 255, 0.72);
+  min-width: 0;
+  word-break: break-word;
+}
+
+.running-dock-item-detail {
+  flex: 1 1 100%;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.34);
+  word-break: break-word;
 }
 
 .composer {

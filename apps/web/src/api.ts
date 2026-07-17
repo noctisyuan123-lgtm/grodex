@@ -43,8 +43,24 @@ export type ChatEvent =
       type: "activity";
       text: string;
       kind?: "thinking" | "tool" | "status";
+      phase?:
+        | "idle"
+        | "working"
+        | "thinking"
+        | "tool"
+        | "permission"
+        | "compact"
+        | "queue"
+        | "sleeping"
+        | "error";
       agentKind?: "main" | "subagent";
       subagentModel?: string;
+      at: string;
+    }
+  | {
+      type: "permission";
+      tool?: string;
+      status: "pending" | "resolved";
       at: string;
     }
   | {

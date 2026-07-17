@@ -71,7 +71,20 @@ export class GrodexAgent {
   private emitActivity(
     text: string,
     kind: "thinking" | "tool" | "status" = "status",
-    opts?: { agentKind?: "main" | "subagent"; subagentModel?: string }
+    opts?: {
+      agentKind?: "main" | "subagent";
+      subagentModel?: string;
+      phase?:
+        | "idle"
+        | "working"
+        | "thinking"
+        | "tool"
+        | "permission"
+        | "compact"
+        | "queue"
+        | "sleeping"
+        | "error";
+    }
   ): void {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -79,8 +92,18 @@ export class GrodexAgent {
       type: "activity",
       text: trimmed,
       kind,
+      phase: opts?.phase,
       agentKind: opts?.agentKind,
       subagentModel: opts?.subagentModel,
+      at: nowIso(),
+    });
+  }
+
+  private emitPermission(tool: string | undefined, status: "pending" | "resolved"): void {
+    this.emit({
+      type: "permission",
+      tool,
+      status,
       at: nowIso(),
     });
   }
@@ -164,13 +187,24 @@ export class GrodexAgent {
       onRequest: async (id, method, params) => {
         if (method === "session/request_permission") {
           const p = params as {
+            toolCall?: { title?: string; kind?: string };
             options?: Array<{ optionId?: string }>;
           };
+          const tool =
+            p.toolCall?.title?.trim() ||
+            p.toolCall?.kind?.trim() ||
+            undefined;
+          this.emitPermission(tool, "pending");
+          this.emitStatus("Waiting for permission…");
+          this.emitActivity("Waiting for permission…", "status", {
+            phase: "permission",
+          });
           const optionId =
             p.options?.find((o) => o.optionId)?.optionId ?? "allow-once";
           this.transport.reply(id, {
             outcome: { outcome: "selected", optionId },
           });
+          this.emitPermission(tool, "resolved");
           return;
         }
         if (method === "fs/read_text_file" || method === "fs/write_text_file") {
@@ -201,7 +235,7 @@ export class GrodexAgent {
       try {
         const loaded = (await this.transport.send(
           "session/load",
-          { sessionId: opts.sessionId, cwd: opts.cwd },
+          { sessionId: opts.sessionId, cwd: opts.cwd, mcpServers: [] },
           30_000
         )) as { sessionId?: string };
         const sessionId = loaded.sessionId ?? opts.sessionId;
@@ -335,8 +369,19 @@ export class GrodexAgent {
       const update = (p.update ?? p) as Record<string, unknown>;
       const kind = String(update.sessionUpdate ?? "");
       if (kind === "pending_interaction") {
-        this.emitStatus("Waiting for permission…");
+        const ik = String(update.kind ?? "interaction");
+        if (ik === "permission") {
+          this.emitPermission(undefined, "pending");
+          this.emitStatus("Waiting for permission…");
+          this.emitActivity("Waiting for permission…", "status", {
+            phase: "permission",
+          });
+        } else {
+          this.emitStatus(`Waiting: ${ik}…`);
+          this.emitActivity(`Waiting: ${ik}…`, "status", { phase: "working" });
+        }
       } else if (kind === "interaction_resolved") {
+        this.emitPermission(undefined, "resolved");
         this.emitStatus(null);
       } else if (
         kind === "subagent_spawned" ||
@@ -501,7 +546,9 @@ export class GrodexAgent {
           break;
         }
         this.emitStatus("Thinking…");
-        this.emitActivity(thought ? "Thinking…" : "Thinking…", "thinking");
+        this.emitActivity(thought ? "Thinking…" : "Thinking…", "thinking", {
+          phase: "thinking",
+        });
         break;
       }
       case "tool_call": {
@@ -524,11 +571,16 @@ export class GrodexAgent {
         this.activeTools.set(toolId, title);
         this.emitTool(toolId, title, "running", toolKind);
         this.emitStatus(`Running ${title}…`);
+        const isSleeping =
+          toolKind === "sleeping" ||
+          /^(Execute|Running)\s/i.test(title) ||
+          title.toLowerCase().includes("shell");
         this.emitActivity(
           title.startsWith("Execute") || toolKind === "execute"
             ? title.slice(0, 72) + (title.length > 72 ? "…" : "")
             : `Using ${title.slice(0, 60)}…`,
-          "tool"
+          "tool",
+          { phase: isSleeping ? "sleeping" : "tool" }
         );
         break;
       }

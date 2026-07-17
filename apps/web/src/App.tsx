@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { AgentActivityStrip, WorkingPill } from "./AgentActivityStrip";
+import { AgentActivityStrip, RunningDock, WorkingPill } from "./AgentActivityStrip";
 import { ChatTranscript } from "./ChatTranscript";
 import {
   collectActiveSubagentItems,
+  collectNonSubagentDockItems,
   countActiveSubagents,
+  deriveRunningDockOutline,
+  hasNonSubagentDockProcess,
 } from "./subagentProcess";
 import { useChatSession } from "./useChatSession";
 
@@ -21,6 +24,8 @@ export function App() {
     settledTools,
     statusText,
     processLine,
+    activityPhase,
+    permissionPending,
     subagents,
     subagentModel,
     busy,
@@ -47,6 +52,28 @@ export function App() {
     statusText
   );
   const showWorkingPill = activeSubagentCount > 0;
+  const showRunningDock = hasNonSubagentDockProcess(
+    tools,
+    activityPhase,
+    statusText,
+    permissionPending
+  );
+  const dockOutline = deriveRunningDockOutline(
+    tools,
+    activityPhase,
+    processLine,
+    statusText,
+    permissionPending
+  );
+  const dockItems = collectNonSubagentDockItems(
+    tools,
+    activityPhase,
+    processLine,
+    statusText,
+    permissionPending
+  );
+  const dockDetail =
+    activityPhase === "sleeping" && processLine?.trim() ? processLine.trim() : null;
 
   const submit = () => {
     const text = draft;
@@ -167,9 +194,17 @@ export function App() {
             <WorkingPill count={activeSubagentCount} runningItems={workingItems} />
           ) : null}
 
+          {showRunningDock ? (
+            <RunningDock
+              outline={dockOutline}
+              detail={dockDetail}
+              runningItems={dockItems}
+            />
+          ) : null}
+
           <AgentActivityStrip
             status={statusText}
-            processLine={processLine}
+            processLine={showRunningDock ? null : processLine}
             busy={busy}
           />
 

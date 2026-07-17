@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { LiveProcessStack } from "./LiveProcessStack";
 import { SubagentTaskCard } from "./SubagentTaskCard";
 import {
   deriveSubagentActivityLine,
@@ -105,11 +106,17 @@ export function ChatTranscript({
         </div>
       ))}
 
-      {liveTools.length > 0 ? (
+      {liveTools.length > 0 || (busy && processLine?.trim()) ? (
         <div className="chat-process-block">
+          <LiveProcessStack
+            liveTools={liveTools}
+            processLine={processLine}
+            settledCount={settledTools.length}
+            busy={busy}
+          />
           <ToolTimeline
             tools={liveTools}
-            rollLabels
+            rollLabels={false}
             subagentCardsByToolId={
               Object.keys(subagentCardsByToolId).length > 0
                 ? subagentCardsByToolId

@@ -183,6 +183,107 @@ export function deriveSubagentActivityLine(opts: {
   return spawnRunning ? "Waiting for subagent" : "";
 }
 
+/** RunningDock-worthy but not subagent (sleeping shell / permission). */
+export function hasNonSubagentDockProcess(
+  tools: ToolRow[],
+  activityPhase: string | null | undefined,
+  statusMsg: string | null,
+  permissionPending: boolean
+): boolean {
+  if (permissionPending) return true;
+  if (activityPhase === "sleeping") return true;
+  if (activityPhase === "permission") return true;
+  if (statusMsg != null && /^Permission\b|Waiting for permission/i.test(statusMsg)) {
+    return true;
+  }
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const t = tools[i]!;
+    if (t.status !== "running") continue;
+    if ((t.kind || "").toLowerCase() === "sleeping") return true;
+    if (/^Execute\s/i.test(t.label || "")) return true;
+  }
+  return false;
+}
+
+export function collectNonSubagentDockItems(
+  tools: ToolRow[],
+  activityPhase: string | null | undefined,
+  processLine: string | null,
+  statusMsg: string | null,
+  permissionPending: boolean
+): RunningProcessItem[] {
+  const items: RunningProcessItem[] = [];
+  const seen = new Set<string>();
+
+  if (permissionPending || activityPhase === "permission") {
+    items.push({
+      id: "permission",
+      kind: "permission",
+      label: statusMsg?.trim() || "Waiting for permission…",
+    });
+  }
+
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const t = tools[i]!;
+    if (t.status !== "running") continue;
+    const kind = (t.kind || "").toLowerCase();
+    const isShell =
+      kind === "sleeping" ||
+      kind === "execute" ||
+      /^Execute\s/i.test(t.label || "");
+    if (!isShell || isSubagentSpawnTool(t)) continue;
+    if (seen.has(t.toolId)) continue;
+    seen.add(t.toolId);
+    items.push({
+      id: t.toolId,
+      kind: "shell",
+      label: (t.label || t.name || "Shell").replace(/^Ran\s+/i, "").trim(),
+      detail: processLine?.trim() || undefined,
+    });
+  }
+
+  if (
+    activityPhase === "sleeping" &&
+    processLine?.trim() &&
+    !items.some((x) => x.detail === processLine.trim())
+  ) {
+    items.unshift({
+      id: "sleeping-activity",
+      kind: "shell",
+      label: processLine.trim(),
+    });
+  }
+
+  return items;
+}
+
+export function deriveRunningDockOutline(
+  tools: ToolRow[],
+  activityPhase: string | null | undefined,
+  processLine: string | null,
+  statusMsg: string | null,
+  permissionPending: boolean
+): string {
+  if (permissionPending || activityPhase === "permission") {
+    return statusMsg?.trim() || "Waiting for permission…";
+  }
+  const shell = tools.find(
+    (t) =>
+      t.status === "running" &&
+      ((t.kind || "").toLowerCase() === "sleeping" ||
+        (t.kind || "").toLowerCase() === "execute" ||
+        /^Execute\s/i.test(t.label || "")) &&
+      !isSubagentSpawnTool(t)
+  );
+  if (shell?.label?.trim()) {
+    return shell.label.replace(/^Ran\s+/i, "").trim();
+  }
+  if (activityPhase === "sleeping" && processLine?.trim()) {
+    return processLine.trim();
+  }
+  return "";
+}
+
 /** Best-effort match: first live subagent for a running spawn tool row. */
 export function pickSubagentForSpawnTool(
   subagents: SubagentRow[],

@@ -101,6 +101,8 @@ export function useChatSession() {
   const [tools, setTools] = useState<ToolRow[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [processLine, setProcessLine] = useState<string | null>(null);
+  const [activityPhase, setActivityPhase] = useState<string | null>(null);
+  const [permissionPending, setPermissionPending] = useState(false);
   const [subagents, setSubagents] = useState<SubagentRow[]>([]);
   const [subagentModel, setSubagentModel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -155,6 +157,8 @@ export function useChatSession() {
           setSubagents([]);
           setSubagentModel(null);
           setProcessLine(null);
+          setActivityPhase(null);
+          setPermissionPending(false);
           setBusy(true);
           break;
         case "assistant_chunk":
@@ -181,6 +185,8 @@ export function useChatSession() {
           setBusy(false);
           setStatusText(null);
           setProcessLine(null);
+          setActivityPhase(null);
+          setPermissionPending(false);
           setSubagentModel(null);
           break;
         case "status":
@@ -188,6 +194,7 @@ export function useChatSession() {
           break;
         case "activity":
           setProcessLine(event.text);
+          if (event.phase) setActivityPhase(event.phase);
           if (event.agentKind === "subagent" && event.subagentModel?.trim()) {
             setSubagentModel(event.subagentModel.trim());
           } else if (!event.subagentModel) {
@@ -206,6 +213,17 @@ export function useChatSession() {
             setSubagents((rows) =>
               rows.filter((r) => r.subagentId !== event.subagentId)
             );
+          }
+          break;
+        case "permission":
+          setPermissionPending(event.status === "pending");
+          if (event.status === "pending") {
+            setActivityPhase("permission");
+            setStatusText(
+              event.tool ? `Permission: ${event.tool}` : "Waiting for permission…"
+            );
+          } else {
+            setPermissionPending(false);
           }
           break;
         case "tool":
@@ -234,6 +252,8 @@ export function useChatSession() {
     setSubagents([]);
     setSubagentModel(null);
     setProcessLine(null);
+    setActivityPhase(null);
+    setPermissionPending(false);
     assistantBuf.current = "";
     liveAssistantId.current = `a-${Date.now()}`;
     try {
@@ -277,6 +297,8 @@ export function useChatSession() {
     setSubagents([]);
     setSubagentModel(null);
     setProcessLine(null);
+    setActivityPhase(null);
+    setPermissionPending(false);
     try {
       await promptSession(trimmed);
     } catch (e) {
@@ -290,6 +312,8 @@ export function useChatSession() {
     setBusy(false);
     setStatusText(null);
     setProcessLine(null);
+    setActivityPhase(null);
+    setPermissionPending(false);
     setSubagentModel(null);
   };
 
@@ -311,6 +335,8 @@ export function useChatSession() {
     settledTools,
     statusText,
     processLine,
+    activityPhase,
+    permissionPending,
     subagents,
     subagentModel,
     busy,

@@ -87,6 +87,13 @@ export type RunningProcessItem = {
   detail?: string;
 };
 
+export type RunningDockProps = {
+  outline: string;
+  detail?: string | null;
+  secondary?: string | null;
+  runningItems?: RunningProcessItem[];
+};
+
 export type WorkingPillProps = {
   /** Active nested subagents only */
   count: number;
@@ -141,6 +148,80 @@ export function WorkingPill({ count, runningItems = [] }: WorkingPillProps) {
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+/** Compact running shell / permission bar — above composer, left-aligned. */
+export function RunningDock({
+  outline,
+  detail,
+  secondary,
+  runningItems = [],
+}: RunningDockProps) {
+  const [listOpen, setListOpen] = useState(false);
+  const title = outline.trim();
+  if (!title) return null;
+
+  const canExpand = runningItems.length > 0;
+
+  return (
+    <div
+      className={`running-dock${listOpen ? " running-dock--expanded" : ""}`}
+      aria-live="polite"
+    >
+      <SessionWorkingDots className="running-dock-dots" />
+      <div className="running-dock-lines">
+        <div className="running-dock-outline-row">
+          {canExpand ? (
+            <button
+              type="button"
+              className="running-dock-outline-btn"
+              onClick={() => setListOpen((v) => !v)}
+              aria-expanded={listOpen}
+              title={
+                listOpen
+                  ? "Hide running processes"
+                  : "Show running subagents / scripts"
+              }
+            >
+              <SlideLine text={title} className="running-dock-outline" />
+              <span
+                className={`running-dock-expand-chev ${listOpen ? "open" : ""}`}
+              >
+                ▾
+              </span>
+            </button>
+          ) : (
+            <SlideLine text={title} className="running-dock-outline" />
+          )}
+          {secondary ? (
+            <span className="running-dock-secondary">{secondary}</span>
+          ) : null}
+        </div>
+        {detail?.trim() ? (
+          <div className="running-dock-detail-row">
+            <SlideLine text={detail.trim()} className="running-dock-detail" />
+          </div>
+        ) : null}
+        {listOpen && canExpand ? (
+          <ul className="running-dock-list">
+            {runningItems.map((item) => (
+              <li key={item.id} className="running-dock-item">
+                {item.kind ? (
+                  <span className="running-dock-kind">{item.kind}</span>
+                ) : null}
+                <span className="running-dock-label">{item.label}</span>
+                {item.detail?.trim() ? (
+                  <span className="running-dock-item-detail">
+                    {item.detail.trim()}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </div>
   );
 }

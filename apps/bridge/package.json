@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "smoke:acp": "tsx scripts/smoke-acp.ts",
-    "smoke:chat": "tsx scripts/smoke-chat.ts"
+    "smoke:chat": "tsx scripts/smoke-chat.ts",
+    "smoke:load": "tsx scripts/smoke-load.ts"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
