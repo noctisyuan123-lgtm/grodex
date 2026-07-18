@@ -39,20 +39,36 @@ type Props = {
   onClose: () => void;
 };
 
+const SECTION_IDS = [
+  "memory",
+  "rules",
+  "hooks",
+  "skills",
+  "agent",
+  "bridge",
+] as const;
+
+type SectionId = (typeof SECTION_IDS)[number];
+
+const CLOSED_SECTIONS = Object.fromEntries(
+  SECTION_IDS.map((id) => [id, false])
+) as Record<SectionId, boolean>;
+
 function AccordionSection({
   title,
   icon,
-  defaultCollapsed = false,
+  open,
+  onToggle,
   hint,
   children,
 }: {
   title: string;
   icon: ReactNode;
-  defaultCollapsed?: boolean;
+  open: boolean;
+  onToggle: () => void;
   hint?: ReactNode;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(!defaultCollapsed);
   return (
     <section
       className={`customize-section customize-accordion${
@@ -63,7 +79,7 @@ function AccordionSection({
         type="button"
         className="customize-accordion-head"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
       >
         <span className="customize-accordion-title">
           {icon}
@@ -121,6 +137,25 @@ export function CustomizePanel({
   const [hookSaved, setHookSaved] = useState<string | null>(null);
   const [newHookName, setNewHookName] = useState("");
   const [showNewHook, setShowNewHook] = useState(false);
+  const [openSections, setOpenSections] =
+    useState<Record<SectionId, boolean>>(CLOSED_SECTIONS);
+
+  const toggleSection = (id: SectionId) => {
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const expandAllSections = () => {
+    setOpenSections(
+      Object.fromEntries(SECTION_IDS.map((id) => [id, true])) as Record<
+        SectionId,
+        boolean
+      >
+    );
+  };
+
+  const collapseAllSections = () => {
+    setOpenSections(CLOSED_SECTIONS);
+  };
 
   const reloadFiles = async () => {
     setFilesLoading(true);
@@ -379,16 +414,33 @@ export function CustomizePanel({
           <IconCustomize size={16} />
           <span>Customize</span>
         </div>
-        <button type="button" className="customize-close" onClick={onClose}>
-          Done
-        </button>
+        <div className="customize-head-actions">
+          <button
+            type="button"
+            className="customize-bulk-toggle"
+            onClick={expandAllSections}
+          >
+            Expand all
+          </button>
+          <button
+            type="button"
+            className="customize-bulk-toggle"
+            onClick={collapseAllSections}
+          >
+            Collapse all
+          </button>
+          <button type="button" className="customize-close" onClick={onClose}>
+            Done
+          </button>
+        </div>
       </div>
 
       <div className="customize-body">
         <AccordionSection
           title="Memory"
           icon={<IconList size={14} />}
-          defaultCollapsed
+          open={openSections.memory}
+          onToggle={() => toggleSection("memory")}
           hint={
             <p className="customize-hint">
               Sticky protocol stays in harness; index is read on demand. mem0{" "}
@@ -473,7 +525,8 @@ export function CustomizePanel({
         <AccordionSection
           title="Rules"
           icon={<IconPencil size={14} />}
-          defaultCollapsed
+          open={openSections.rules}
+          onToggle={() => toggleSection("rules")}
           hint={
             <p className="customize-hint">
               Edit <code>~/.grok/rules/*.md</code>. Changes apply on the next new
@@ -521,15 +574,18 @@ export function CustomizePanel({
           ) : null}
         </AccordionSection>
 
-        <section className="customize-section">
-          <h3>
-            <IconSpark size={14} /> Hooks
-          </h3>
-          <p className="customize-hint">
-            Read/write <code>~/.grok/hooks/*.json</code> (and scripts in the same
-            dir). Takes effect on the next new session.
-          </p>
-
+        <AccordionSection
+          title="Hooks"
+          icon={<IconSpark size={14} />}
+          open={openSections.hooks}
+          onToggle={() => toggleSection("hooks")}
+          hint={
+            <p className="customize-hint">
+              Read/write <code>~/.grok/hooks/*.json</code> (and scripts in the
+              same dir). Takes effect on the next new session.
+            </p>
+          }
+        >
           <div className="customize-editor-actions" style={{ marginBottom: 8 }}>
             {hooksDir ? (
               <button
@@ -686,12 +742,13 @@ export function CustomizePanel({
               ) : null}
             </div>
           ) : null}
-        </section>
+        </AccordionSection>
 
         <AccordionSection
           title="Skills"
           icon={<IconBook size={14} />}
-          defaultCollapsed
+          open={openSections.skills}
+          onToggle={() => toggleSection("skills")}
           hint={
             <p className="customize-hint">
               Read-only browse of Grok / Claude / Cursor skill dirs.
@@ -719,10 +776,18 @@ export function CustomizePanel({
           )}
         </AccordionSection>
 
-        <section className="customize-section">
-          <h3>
-            <IconLayers size={14} /> Agent defaults
-          </h3>
+        <AccordionSection
+          title="Agent defaults"
+          icon={<IconLayers size={14} />}
+          open={openSections.agent}
+          onToggle={() => toggleSection("agent")}
+          hint={
+            <p className="customize-hint">
+              Change model via the chip on the composer; effort is remembered per
+              model. Applies on the next New Agent / reconnect.
+            </p>
+          }
+        >
           <div className="customize-kv">
             <div>
               <span>Model</span>
@@ -735,16 +800,20 @@ export function CustomizePanel({
               <strong>{modeLabel}</strong>
             </div>
           </div>
-          <p className="customize-hint">
-            Change model via the chip on the composer; effort is remembered per
-            model. Applies on the next New Agent / reconnect.
-          </p>
-        </section>
+        </AccordionSection>
 
-        <section className="customize-section">
-          <h3>
-            <IconTerminal size={14} /> Bridge & MCP
-          </h3>
+        <AccordionSection
+          title="Bridge & MCP"
+          icon={<IconTerminal size={14} />}
+          open={openSections.bridge}
+          onToggle={() => toggleSection("bridge")}
+          hint={
+            <p className="customize-hint">
+              Grok MCP lives in <code>~/.grok/config.toml</code>; Cursor MCP in{" "}
+              <code>~/.cursor/mcp.json</code>. Secrets are masked in the UI.
+            </p>
+          }
+        >
           <div className="customize-kv">
             <div>
               <span>Bridge</span>
@@ -753,11 +822,6 @@ export function CustomizePanel({
               </strong>
             </div>
           </div>
-
-          <p className="customize-hint">
-            Grok MCP lives in <code>~/.grok/config.toml</code>; Cursor MCP in{" "}
-            <code>~/.cursor/mcp.json</code>. Secrets are masked in the UI.
-          </p>
 
           {mcpLoading && (
             <div className="customize-empty">Loading MCP…</div>
@@ -882,7 +946,7 @@ export function CustomizePanel({
           )}
 
           {mcpError ? <div className="customize-error">{mcpError}</div> : null}
-        </section>
+        </AccordionSection>
       </div>
     </div>
   );

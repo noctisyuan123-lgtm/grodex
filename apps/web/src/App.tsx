@@ -707,7 +707,7 @@ export function App() {
           <div className="side-foot">
             <div className={`status-pill ${bridgeOnline ? "ok" : ""}`}>
               <span className="dot" />
-              {bridgeOnline ? "Bridge · grodex" : "Bridge offline"}
+              {bridgeOnline ? "Bridge · Grodex" : "Bridge offline"}
             </div>
           </div>
 
@@ -737,7 +737,7 @@ export function App() {
         {customizeOpen ? (
           <CustomizePanel
             connected={Boolean(connected)}
-            bridgeLabel="grodex"
+            bridgeLabel="Grodex"
             cwd={cwd}
             model={modelMeta.label}
             effortLabel={effortLabel}
@@ -804,7 +804,7 @@ export function App() {
                     ?.title ??
                     (activeSessionId
                       ? `${activeSessionId.slice(0, 8)}…`
-                      : "grodex")}
+                      : "Grodex")}
                 </h1>
                 <span
                   className={`stage-status ${connected ? "ok" : bridgeOnline ? "warn" : "bad"}`}
