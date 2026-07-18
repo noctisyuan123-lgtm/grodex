@@ -40,6 +40,8 @@ export function App() {
 
   const [draft, setDraft] = useState("");
 
+  const activeSessionId = session?.sessionId ?? null;
+
   const activeSubagentCount = countActiveSubagents(
     tools,
     subagents,
@@ -81,30 +83,52 @@ export function App() {
     void onSend(text);
   };
 
+  const connectionLabel = connected
+    ? "Connected"
+    : bridgeUp
+      ? "Bridge up"
+      : "Bridge offline";
+
+  const stageTitle =
+    recentSessions.find((s) => s.sessionId === activeSessionId)?.title ??
+    (activeSessionId ? `${activeSessionId.slice(0, 8)}…` : "Select or connect a session");
+
   return (
     <div className="shell">
-      <header className="topbar">
-        <div className="brand">grodex</div>
-        <div className={`pill ${connected ? "ok" : bridgeUp ? "warn" : "bad"}`}>
-          {connected
-            ? "Connected"
-            : bridgeUp
-              ? "Bridge up"
-              : "Bridge offline"}
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand">grodex</span>
+          <span
+            className={`status-dot ${connected ? "ok" : bridgeUp ? "warn" : "bad"}`}
+            title={connectionLabel}
+          />
         </div>
-      </header>
 
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-head">
-            <h2>Session</h2>
-            <button type="button" className="ghost sm" onClick={() => void refresh()}>
-              ↻
-            </button>
-          </div>
+        <div className="sidebar-actions">
+          <button
+            type="button"
+            className="side-btn primary"
+            onClick={() => void onConnect()}
+            disabled={busy || !bridgeUp}
+          >
+            {busy && !connected ? "Connecting…" : "Connect"}
+          </button>
+          <button
+            type="button"
+            className="side-btn"
+            onClick={() => {
+              setSessionIdInput("");
+              void onDisconnect();
+            }}
+            disabled={busy}
+          >
+            New session
+          </button>
+        </div>
 
+        <details className="resume-details">
+          <summary>Resume by id</summary>
           <label className="field compact">
-            <span>Resume by id</span>
             <input
               value={sessionIdInput}
               onChange={(e) => setSessionIdInput(e.target.value)}
@@ -112,72 +136,85 @@ export function App() {
               spellCheck={false}
             />
           </label>
+        </details>
 
-          <div className="actions stack">
-            <button
-              type="button"
-              onClick={() => void onConnect()}
-              disabled={busy || !bridgeUp}
-            >
-              {busy && !connected ? "Connecting…" : "Connect"}
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => void onDisconnect()}
-              disabled={busy || !connected}
-            >
-              Disconnect
-            </button>
+        {session ? (
+          <div className="session-current mono" title={session.sessionId}>
+            {session.sessionId.slice(0, 8)}… · {session.attachMode}
           </div>
+        ) : null}
 
-          {session ? (
-            <dl className="facts compact">
-              <div>
-                <dt>sessionId</dt>
-                <dd className="mono">{session.sessionId}</dd>
-              </div>
-              <div>
-                <dt>attach</dt>
-                <dd>{session.attachMode}</dd>
-              </div>
-              <div>
-                <dt>bin</dt>
-                <dd className="mono small">{bin || session.bin}</dd>
-              </div>
-            </dl>
-          ) : null}
+        <div className="side-section">
+          <span>Recent</span>
+          <button
+            type="button"
+            className="icon-mini"
+            onClick={() => void refresh()}
+            title="Refresh bridge"
+          >
+            ↻
+          </button>
+        </div>
 
-          <div className="sidebar-head">
-            <h2>Recent</h2>
-          </div>
-          <ul className="session-list">
-            {recentSessions.length === 0 ? (
-              <li className="muted">No sessions under ~/.grok/sessions</li>
-            ) : (
-              recentSessions.map((s) => (
-                <li key={s.sessionId}>
+        <ul className="side-list">
+          {recentSessions.length === 0 ? (
+            <li className="side-empty">No sessions under ~/.grok/sessions</li>
+          ) : (
+            recentSessions.map((s) => {
+              const active = activeSessionId === s.sessionId;
+              return (
+                <li
+                  key={s.sessionId}
+                  className={`side-item session row${active ? " active" : ""}`}
+                >
                   <button
                     type="button"
-                    className="session-item"
+                    className="session-main"
                     onClick={() => {
                       setSessionIdInput(s.sessionId);
                       void onConnect(s.sessionId);
                     }}
                     title={s.sessionId}
                   >
-                    <span className="session-title">{s.title}</span>
-                    <span className="session-meta mono">
-                      {s.sessionId.slice(0, 8)}… · {s.numMessages ?? 0} msgs
+                    <span className="name">{s.title}</span>
+                    <span className="meta mono">
+                      {s.sessionId.slice(0, 8)}… · {s.numMessages ?? 0}
                     </span>
                   </button>
                 </li>
-              ))
-            )}
-          </ul>
-        </aside>
+              );
+            })
+          )}
+        </ul>
 
-        <main className="chat-main">
+        {bin ? (
+          <div className="sidebar-foot mono" title={bin}>
+            {bin.split("/").pop()}
+          </div>
+        ) : null}
+      </aside>
+
+      <section className="stage">
+        <header className="stage-header">
+          <div className="stage-header-main">
+            <h1 className="stage-title">{stageTitle}</h1>
+            <span className={`stage-status ${connected ? "ok" : bridgeUp ? "warn" : "bad"}`}>
+              {connectionLabel}
+            </span>
+          </div>
+          {connected ? (
+            <button
+              type="button"
+              className="ghost-btn compact"
+              onClick={() => void onDisconnect()}
+              disabled={busy}
+            >
+              Disconnect
+            </button>
+          ) : null}
+        </header>
+
+        <div className="stage-main">
           <ChatTranscript
             messages={messages}
             tools={tools}
@@ -189,63 +226,75 @@ export function App() {
             processLine={processLine}
             busy={busy}
           />
+        </div>
 
-          {showWorkingPill ? (
-            <WorkingPill count={activeSubagentCount} runningItems={workingItems} />
-          ) : null}
+        <div className="composer-dock">
+          <div className="composer-dock-inner">
+            {showWorkingPill ? (
+              <WorkingPill count={activeSubagentCount} runningItems={workingItems} />
+            ) : null}
 
-          {showRunningDock ? (
-            <RunningDock
-              outline={dockOutline}
-              detail={dockDetail}
-              runningItems={dockItems}
+            {showRunningDock ? (
+              <RunningDock
+                outline={dockOutline}
+                detail={dockDetail}
+                runningItems={dockItems}
+              />
+            ) : null}
+
+            <AgentActivityStrip
+              status={statusText}
+              processLine={showRunningDock ? null : processLine}
+              busy={busy}
             />
-          ) : null}
 
-          <AgentActivityStrip
-            status={statusText}
-            processLine={showRunningDock ? null : processLine}
-            busy={busy}
-          />
-
-          <div className="composer">
-            <textarea
-              className="composer-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={
-                connected
-                  ? "Message Core… (Enter to send, Shift+Enter for newline)"
-                  : "Connect a session first"
-              }
-              disabled={!connected || busy}
-              rows={3}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (connected && draft.trim()) submit();
+            <div className="composer-shell followup">
+              <textarea
+                className="composer-ta"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={
+                  connected
+                    ? "Message Core…"
+                    : "Connect a session to start chatting"
                 }
-              }}
-            />
-            <div className="composer-actions">
-              {busy ? (
-                <button type="button" className="ghost" onClick={() => void onCancel()}>
-                  Stop
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!connected || busy || !draft.trim()}
-              >
-                Send
-              </button>
+                disabled={!connected || busy}
+                rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (connected && draft.trim()) submit();
+                  }
+                }}
+              />
+              <div className="composer-meta-row">
+                <span className="composer-hint">Enter send · Shift+Enter newline</span>
+                <div className="composer-actions">
+                  {busy ? (
+                    <button
+                      type="button"
+                      className="ghost-btn compact stop"
+                      onClick={() => void onCancel()}
+                    >
+                      Stop
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="send-btn primary"
+                    onClick={submit}
+                    disabled={!connected || busy || !draft.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {error ? <pre className="error">{error}</pre> : null}
-        </main>
-      </div>
+            {error ? <pre className="error">{error}</pre> : null}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
