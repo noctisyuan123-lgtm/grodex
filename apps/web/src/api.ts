@@ -26,6 +26,10 @@ export type GrokSessionEntry = {
   numMessages?: number;
 };
 
+export type ProjectEntry = { path: string; name: string; at: string };
+
+export type AgentMode = "agent" | "plan";
+
 export type ChatEvent =
   | { type: "user"; text: string; at: string }
   | {
@@ -215,4 +219,54 @@ export function openSessionStream(
 
 export function bridgeBaseUrl(): string {
   return DEFAULT_BRIDGE;
+}
+
+export async function fetchRecentProjects(): Promise<ProjectEntry[]> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/recent`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { recent?: ProjectEntry[] };
+  return data.recent ?? [];
+}
+
+export async function rememberPath(p: string): Promise<void> {
+  await fetch(`${DEFAULT_BRIDGE}/api/recent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: p }),
+  }).catch(() => undefined);
+}
+
+export async function fetchRememberedCwd(): Promise<string> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/cwd`);
+  if (!res.ok) return "";
+  const data = (await res.json()) as { path?: string };
+  return typeof data.path === "string" ? data.path : "";
+}
+
+export async function setProjectCwd(p: string): Promise<string> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/cwd`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: p }),
+  });
+  const data = (await res.json()) as { ok?: boolean; path?: string; error?: string };
+  if (!res.ok || !data.ok || !data.path) {
+    throw new Error(data.error ?? `cwd ${res.status}`);
+  }
+  return data.path;
+}
+
+export async function pickFolder(): Promise<string | null> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/folder-pick`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`folder-pick ${res.status}`);
+  }
+  const data = (await res.json()) as {
+    cancelled?: boolean;
+    path?: string | null;
+    error?: string;
+  };
+  if (data.error) throw new Error(data.error);
+  if (data.cancelled || !data.path) return null;
+  return data.path;
 }

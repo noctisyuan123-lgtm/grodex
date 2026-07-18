@@ -5,15 +5,25 @@ import {
   disconnectSession,
   fetchHealth,
   fetchRecentSessions,
+  fetchRememberedCwd,
   fetchSessionHistory,
   openSessionStream,
   promptSession,
+  rememberPath,
+  type AgentMode,
   type BridgeStatus,
   type ChatEvent,
   type GrokSessionEntry,
   type SessionInfo,
 } from "./api";
 import type { ToolRow } from "./ToolTimeline";
+
+export type { AgentMode } from "./api";
+
+export type PendingHistorySession = {
+  sessionId: string;
+  cwd: string;
+};
 
 export type SubagentRow = {
   subagentId: string;
@@ -218,6 +228,16 @@ export function useChatSession() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [recentSessions, setRecentSessions] = useState<GrokSessionEntry[]>([]);
   const [sessionIdInput, setSessionIdInput] = useState("");
+  const [cwd, setCwdState] = useState(
+    () => localStorage.getItem("grodex-cwd") || ""
+  );
+  const [agentMode, setAgentMode] = useState<AgentMode>(() => {
+    const raw = localStorage.getItem("grodex-mode");
+    return raw === "plan" ? "plan" : "agent";
+  });
+  const [historyOnly, setHistoryOnly] = useState(false);
+  const [pendingHistory, setPendingHistory] =
+    useState<PendingHistorySession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [tools, setTools] = useState<ToolRow[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);
@@ -290,21 +310,42 @@ export function useChatSession() {
     }
   }, []);
 
-  const refreshSessions = useCallback(async (cwd?: string) => {
+  const refreshSessions = useCallback(async (cwdFilter?: string) => {
     try {
-      const list = await fetchRecentSessions({ cwd, limit: 20 });
+      const list = await fetchRecentSessions({ cwd: cwdFilter, limit: 30 });
       setRecentSessions(list);
     } catch {
       setRecentSessions([]);
     }
   }, []);
 
+  const setCwd = useCallback(
+    (path: string) => {
+      const trimmed = path.trim();
+      setCwdState(trimmed);
+      if (trimmed) localStorage.setItem("grodex-cwd", trimmed);
+      else localStorage.removeItem("grodex-cwd");
+    },
+    []
+  );
+
+  const setMode = useCallback((mode: AgentMode) => {
+    setAgentMode(mode);
+    localStorage.setItem("grodex-mode", mode);
+  }, []);
+
+  useEffect(() => {
+    void fetchRememberedCwd().then((p) => {
+      if (p) setCwd(p);
+    });
+  }, [setCwd]);
+
   useEffect(() => {
     void refresh();
-    void refreshSessions();
+    void refreshSessions(cwd || undefined);
     const t = setInterval(() => void refresh(), 5000);
     return () => clearInterval(t);
-  }, [refresh, refreshSessions]);
+  }, [refresh, refreshSessions, cwd]);
 
   useEffect(() => {
     const close = openSessionStream((event: ChatEvent) => {
@@ -314,9 +355,7 @@ export function useChatSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs + setState are stable
   }, []);
 
-  const onConnect = async (sessionIdOverride?: string) => {
-    setBusy(true);
-    setError(null);
+  const resetTimeline = useCallback(() => {
     setMessages([]);
     setTools([]);
     setSubagents([]);
@@ -324,39 +363,62 @@ export function useChatSession() {
     setProcessLine(null);
     setActivityPhase(null);
     setPermissionPending(false);
+    setStatusText(null);
     assistantBuf.current = "";
     liveAssistantId.current = `a-${Date.now()}`;
-    try {
-      const sid =
-        sessionIdOverride?.trim() ||
-        sessionIdInput.trim() ||
-        undefined;
-      const result = await connectSession({ sessionId: sid });
-      setSession(result.session);
-      setSessionIdInput(result.session.sessionId);
-      setStatus({ state: "connected", session: result.session });
+  }, []);
 
-      const hydratedTurns = result.session.hydrateUserTurns ?? 0;
-      if (result.session.attachMode === "load") {
-        try {
-          const hist = await fetchSessionHistory(result.session.sessionId);
-          const preferHistory =
-            hist.userTurns > hydratedTurns ||
-            (hist.userTurns > 0 && messageCountRef.current === 0);
-          if (preferHistory) {
-            setMessages([]);
-            setTools([]);
-            setSubagents([]);
-            assistantBuf.current = "";
-            liveAssistantId.current = `a-${Date.now()}`;
-            applyHistoryEvents(hist.events);
-          }
-        } catch {
-          /* optional fallback — bridge may have already hydrated via SSE */
+  const connectCore = async (
+    sessionIdOverride?: string,
+    opts?: { preserveMessages?: boolean; cwdOverride?: string }
+  ) => {
+    if (!opts?.preserveMessages) resetTimeline();
+    setHistoryOnly(false);
+    setPendingHistory(null);
+    const sid =
+      sessionIdOverride?.trim() ||
+      pendingHistory?.sessionId ||
+      sessionIdInput.trim() ||
+      undefined;
+    const connectCwd = opts?.cwdOverride?.trim() || cwd.trim() || undefined;
+    const result = await connectSession({
+      sessionId: sid,
+      cwd: connectCwd,
+    });
+    setSession(result.session);
+    setSessionIdInput(result.session.sessionId);
+    setCwd(result.session.cwd);
+    void rememberPath(result.session.cwd);
+    setStatus({ state: "connected", session: result.session });
+
+    const hydratedTurns = result.session.hydrateUserTurns ?? 0;
+    if (result.session.attachMode === "load" && !opts?.preserveMessages) {
+      try {
+        const hist = await fetchSessionHistory(result.session.sessionId);
+        const preferHistory =
+          hist.userTurns > hydratedTurns ||
+          (hist.userTurns > 0 && messageCountRef.current === 0);
+        if (preferHistory) {
+          resetTimeline();
+          applyHistoryEvents(hist.events);
         }
+      } catch {
+        /* bridge may have already hydrated via SSE */
       }
+    }
 
-      void refreshSessions(result.session.cwd);
+    void refreshSessions(result.session.cwd);
+    return result.session;
+  };
+
+  const onConnect = async (
+    sessionIdOverride?: string,
+    opts?: { preserveMessages?: boolean; cwdOverride?: string }
+  ) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await connectCore(sessionIdOverride, opts);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       await refresh();
@@ -365,23 +427,53 @@ export function useChatSession() {
     }
   };
 
-  const onDisconnect = async () => {
+  const openHistorySession = async (sessionId: string, histCwd: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (session) {
+        await disconnectSession();
+        setSession(null);
+        setStatus({ state: "idle" });
+      }
+      resetTimeline();
+      setCwd(histCwd);
+      void rememberPath(histCwd);
+      setSessionIdInput(sessionId);
+      setPendingHistory({ sessionId, cwd: histCwd });
+      setHistoryOnly(true);
+      const hist = await fetchSessionHistory(sessionId);
+      applyHistoryEvents(hist.events);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const newAgent = async () => {
     setBusy(true);
     try {
       await disconnectSession();
       setSession(null);
-      setMessages([]);
-      setTools([]);
-      setProcessLine(null);
+      setStatus({ state: "idle" });
+      setHistoryOnly(false);
+      setPendingHistory(null);
+      setSessionIdInput("");
+      resetTimeline();
       await refresh();
     } finally {
       setBusy(false);
     }
   };
 
+  const onDisconnect = async () => {
+    await newAgent();
+  };
+
   const onSend = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || !session) return;
+    if (!trimmed) return;
     setError(null);
     setBusy(true);
     setTools([]);
@@ -391,6 +483,17 @@ export function useChatSession() {
     setActivityPhase(null);
     setPermissionPending(false);
     try {
+      if (historyOnly && pendingHistory) {
+        await connectCore(pendingHistory.sessionId, {
+          preserveMessages: true,
+          cwdOverride: pendingHistory.cwd,
+        });
+      } else if (!session) {
+        if (!cwd.trim()) {
+          throw new Error("Select a project folder first");
+        }
+        await connectCore(undefined, { cwdOverride: cwd });
+      }
       await promptSession(trimmed);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -409,6 +512,7 @@ export function useChatSession() {
   };
 
   const connected = status.state === "connected" && session;
+  const ready = bridgeUp === true;
   const liveTools = tools.filter((t) => t.status === "running");
   const settledTools = tools.filter((t) => t.status !== "running");
 
@@ -417,6 +521,12 @@ export function useChatSession() {
     bin,
     status,
     session,
+    cwd,
+    setCwd,
+    agentMode,
+    setAgentMode: setMode,
+    historyOnly,
+    pendingHistory,
     recentSessions,
     sessionIdInput,
     setSessionIdInput,
@@ -432,11 +542,15 @@ export function useChatSession() {
     subagentModel,
     busy,
     error,
+    setError,
     connected,
+    ready,
     refresh,
     refreshSessions,
     onConnect,
     onDisconnect,
+    newAgent,
+    openHistorySession,
     onSend,
     onCancel,
   };

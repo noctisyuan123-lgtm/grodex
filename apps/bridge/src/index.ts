@@ -17,6 +17,13 @@ import {
 } from "./event-hub.js";
 import { chatHistoryToEvents } from "./session-history.js";
 import { nowIso } from "./chat-events.js";
+import {
+  getRememberedCwd,
+  loadRecent,
+  pushRecent,
+  setRememberedCwd,
+} from "./recent-paths.js";
+import { pickFolderMac } from "./folder-pick.js";
 
 const PORT = Number(process.env.GRODEX_BRIDGE_PORT ?? 8790);
 const HOST = process.env.GRODEX_BRIDGE_HOST ?? "127.0.0.1";
@@ -73,6 +80,74 @@ const server = http.createServer(async (req, res) => {
       alive: isAgentAlive(),
       status: getStatus(),
     });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/recent") {
+    json(res, 200, { ok: true, recent: loadRecent() });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/recent") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const p = typeof body.path === "string" ? body.path.trim() : "";
+      if (!p) {
+        json(res, 400, { ok: false, error: "path required" });
+        return;
+      }
+      json(res, 200, { ok: true, recent: pushRecent(p) });
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/cwd") {
+    json(res, 200, { ok: true, path: getRememberedCwd() });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/cwd") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const p = typeof body.path === "string" ? body.path.trim() : "";
+      const saved = setRememberedCwd(p);
+      json(res, 200, { ok: true, path: saved, recent: loadRecent() });
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/folder-pick") {
+    try {
+      const picked = await pickFolderMac();
+      if (!picked) {
+        json(res, 200, { ok: true, cancelled: true, path: null });
+        return;
+      }
+      const saved = setRememberedCwd(picked);
+      json(res, 200, {
+        ok: true,
+        cancelled: false,
+        path: saved,
+        recent: loadRecent(),
+      });
+    } catch (err) {
+      json(res, 500, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return;
   }
 
