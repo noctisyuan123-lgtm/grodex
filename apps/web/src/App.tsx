@@ -4,12 +4,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import { AgentActivityStrip, RunningDock, WorkingPill } from "./AgentActivityStrip";
 import { ChatTranscript } from "./ChatTranscript";
-import { CustomizePanelStub } from "./CustomizePanelStub";
+import { CustomizePanel } from "./CustomizePanel";
+import { SearchModal, type SearchSelection } from "./SearchModal";
 import {
   IconArrowUp,
   IconCustomize,
@@ -17,12 +16,13 @@ import {
   IconFolderOpen,
   IconPaperPlane,
   IconRefresh,
+  IconSearch,
   IconSidebar,
   IconStop,
-  IconTerminal,
 } from "./icons";
 import {
   fetchRecentProjects,
+  openLocalPath,
   pickFolder,
   setProjectCwd,
   type GrokSessionEntry,
@@ -94,14 +94,15 @@ export function App() {
     newAgent,
     openHistorySession,
     refreshSessions,
+    onConnect,
+    onDisconnect,
     onSend,
     onCancel,
   } = chat;
 
   const [draft, setDraft] = useState("");
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualPath, setManualPath] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [recentProjects, setRecentProjects] = useState<ProjectEntry[]>([]);
   const [expandedCwd, setExpandedCwd] = useState<Record<string, boolean>>({});
@@ -175,6 +176,18 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+        setCustomizeOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const selectCwd = async (path: string, opts?: { expand?: boolean }) => {
     try {
       const saved = await setProjectCwd(path);
@@ -192,11 +205,44 @@ export function App() {
     try {
       const path = await pickFolder();
       if (path) await selectCwd(path, { expand: true });
-      else setToast("Folder picker unavailable — use Enter path");
+      else setToast("Folder picker cancelled");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setPicking(false);
+    }
+  };
+
+  const handleSearchSelect = (sel: SearchSelection) => {
+    setCustomizeOpen(false);
+    if (sel.kind === "agent") {
+      setSidebarSelectedId(sel.item.sessionId);
+      setExpandedCwd((m) => ({ ...m, [sel.item.cwd]: true }));
+      void openHistorySession(sel.item.sessionId, sel.item.cwd);
+      return;
+    }
+    if (sel.kind === "file") {
+      void openLocalPath(sel.item.path).catch((e) =>
+        setError(e instanceof Error ? e.message : String(e))
+      );
+      return;
+    }
+    switch (sel.item.action) {
+      case "new-agent":
+        void newAgent();
+        break;
+      case "open-project":
+        void onBrowse();
+        break;
+      case "customize":
+        setCustomizeOpen(true);
+        break;
+      case "connect":
+        void onConnect();
+        break;
+      case "disconnect":
+        void onDisconnect();
+        break;
     }
   };
 
@@ -385,12 +431,13 @@ export function App() {
             type="button"
             className="side-btn"
             onClick={() => {
-              setManualPath(cwd);
-              setManualOpen(true);
+              setCustomizeOpen(false);
+              setSearchOpen(true);
             }}
+            title="Search (⌘K)"
           >
-            <IconTerminal className="ico" />
-            Enter path…
+            <IconSearch className="ico" />
+            Search
           </button>
           <button
             type="button"
@@ -507,7 +554,11 @@ export function App() {
         ) : null}
 
         {customizeOpen ? (
-          <CustomizePanelStub onClose={() => setCustomizeOpen(false)} />
+          <CustomizePanel
+            connected={Boolean(connected)}
+            cwd={cwd}
+            onClose={() => setCustomizeOpen(false)}
+          />
         ) : showHome ? (
           <div className="home">
             <div className="home-stack">
@@ -625,43 +676,11 @@ export function App() {
         )}
       </section>
 
-      {manualOpen
-        ? createPortal(
-            <div
-              className="modal-backdrop"
-              onClick={() => setManualOpen(false)}
-            >
-              <form
-                className="modal"
-                onClick={(e) => e.stopPropagation()}
-                onSubmit={(e: FormEvent) => {
-                  e.preventDefault();
-                  if (manualPath.trim()) {
-                    void selectCwd(manualPath.trim(), { expand: true });
-                    setManualOpen(false);
-                  }
-                }}
-              >
-                <h3>Enter path</h3>
-                <input
-                  autoFocus
-                  placeholder="/Users/you/projects/foo"
-                  value={manualPath}
-                  onChange={(e) => setManualPath(e.target.value)}
-                />
-                <div className="modal-actions">
-                  <button type="button" onClick={() => setManualOpen(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="primary">
-                    Use this path
-                  </button>
-                </div>
-              </form>
-            </div>,
-            document.body
-          )
-        : null}
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSearchSelect}
+      />
     </div>
   );
 }

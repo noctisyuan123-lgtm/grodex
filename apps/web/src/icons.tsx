@@ -151,3 +151,57 @@ export function IconCustomize({ size, className }: P) {
     </Svg>
   );
 }
+
+export function IconSearch({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5L14 14" />
+    </Svg>
+  );
+}
+
+export function IconCheck({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+    </Svg>
+  );
+}
+
+export function IconList({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M5 4h9M5 8h9M5 12h9" />
+      <circle cx="2.5" cy="4" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="2.5" cy="8" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="2.5" cy="12" r="0.8" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconPencil({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M9.5 3.5l3 3L5 14H2v-3L9.5 3.5z" />
+      <path d="M8 5l3 3" />
+    </Svg>
+  );
+}
+
+export function IconSpark({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M8 2.5l1.2 3.8L13 7.5l-3.8 1.2L8 12.5 6.8 8.7 3 7.5l3.8-1.2L8 2.5z" />
+    </Svg>
+  );
+}
+
+export function IconLayers({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <circle cx="6.2" cy="8" r="3.4" />
+      <circle cx="9.8" cy="8" r="3.4" />
+    </Svg>
+  );
+}

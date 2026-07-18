@@ -24,6 +24,14 @@ import {
   setRememberedCwd,
 } from "./recent-paths.js";
 import { pickFolderMac } from "./folder-pick.js";
+import { searchAll } from "./search-index.js";
+import { buildCustomizeOverview } from "./customize-overview.js";
+import { listSkills } from "./skills.js";
+import {
+  listCustomizeFiles,
+  writeCustomizeFile,
+} from "./customize-config.js";
+import { openWithDefaultApp, revealInFinder } from "./fs-utils.js";
 
 const PORT = Number(process.env.GRODEX_BRIDGE_PORT ?? 8790);
 const HOST = process.env.GRODEX_BRIDGE_HOST ?? "127.0.0.1";
@@ -35,7 +43,7 @@ const repoRoot = path.resolve(
 
 function cors(res: http.ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
@@ -253,6 +261,90 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && pathname === "/api/session/disconnect") {
     disconnectSession();
     json(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/search") {
+    const q = url.searchParams.get("q")?.trim() ?? "";
+    json(res, 200, { ok: true, ...searchAll(q) });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/skills") {
+    const cwd = url.searchParams.get("cwd")?.trim() || getRememberedCwd() || undefined;
+    json(res, 200, { ok: true, skills: listSkills(cwd) });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/customize/overview") {
+    const cwd = url.searchParams.get("cwd")?.trim() || getRememberedCwd() || undefined;
+    json(res, 200, { ok: true, overview: buildCustomizeOverview(cwd) });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/customize/files") {
+    json(res, 200, { ok: true, files: listCustomizeFiles() });
+    return;
+  }
+
+  if (req.method === "PUT" && pathname === "/api/customize/files") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      const content = typeof body.content === "string" ? body.content : "";
+      if (!id) {
+        json(res, 400, { ok: false, error: "id required" });
+        return;
+      }
+      const file = writeCustomizeFile(id, content);
+      json(res, 200, { ok: true, file });
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/fs/reveal") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const p = typeof body.path === "string" ? body.path.trim() : "";
+      if (!p) {
+        json(res, 400, { ok: false, error: "path required" });
+        return;
+      }
+      await revealInFinder(p);
+      json(res, 200, { ok: true });
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/fs/open") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const p = typeof body.path === "string" ? body.path.trim() : "";
+      if (!p) {
+        json(res, 400, { ok: false, error: "path required" });
+        return;
+      }
+      await openWithDefaultApp(p);
+      json(res, 200, { ok: true });
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return;
   }
 

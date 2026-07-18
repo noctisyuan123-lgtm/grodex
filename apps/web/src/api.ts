@@ -270,3 +270,133 @@ export async function pickFolder(): Promise<string | null> {
   if (data.cancelled || !data.path) return null;
   return data.path;
 }
+
+export type SearchAgentHit = {
+  id: string;
+  kind: "agent";
+  sessionId: string;
+  title: string;
+  cwd: string;
+  repo: string;
+  updatedAt: string;
+};
+
+export type SearchFileHit = {
+  id: string;
+  kind: "file";
+  name: string;
+  path: string;
+};
+
+export type SearchActionHit = {
+  id: string;
+  kind: "action";
+  label: string;
+  action: "new-agent" | "open-project" | "customize" | "connect" | "disconnect";
+};
+
+export async function fetchSearch(q = ""): Promise<{
+  agents: SearchAgentHit[];
+  files: SearchFileHit[];
+  actions: SearchActionHit[];
+}> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  const qs = params.toString();
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/search${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw new Error(`search ${res.status}`);
+  const data = (await res.json()) as {
+    agents?: SearchAgentHit[];
+    files?: SearchFileHit[];
+    actions?: SearchActionHit[];
+  };
+  return {
+    agents: data.agents ?? [],
+    files: data.files ?? [],
+    actions: data.actions ?? [],
+  };
+}
+
+export type SkillEntry = {
+  name: string;
+  description: string;
+  source: string;
+  dir: string;
+};
+
+export type GrokMcpServer = {
+  name: string;
+  enabled: boolean;
+  command?: string;
+  args?: string[];
+  env: Record<string, string>;
+};
+
+export type CustomizeOverview = {
+  memory: {
+    index: string;
+    sticky: string;
+    entriesDir: string;
+    indexExists: boolean;
+    stickyExists: boolean;
+    entriesExists: boolean;
+  };
+  rules: Array<{ name: string; path: string }>;
+  ruleFiles: Array<{
+    id: string;
+    name: string;
+    path: string;
+    content: string;
+  }>;
+  skills: SkillEntry[];
+  bridge: {
+    connected: boolean;
+    bin: string;
+    sessionId: string | null;
+    cwd: string;
+    status: string;
+  };
+  mcp: {
+    configPath: string;
+    servers: GrokMcpServer[];
+  };
+};
+
+export async function fetchCustomizeOverview(
+  cwd?: string
+): Promise<CustomizeOverview> {
+  const params = new URLSearchParams();
+  if (cwd) params.set("cwd", cwd);
+  const qs = params.toString();
+  const res = await fetch(
+    `${DEFAULT_BRIDGE}/api/customize/overview${qs ? `?${qs}` : ""}`
+  );
+  if (!res.ok) throw new Error(`customize overview ${res.status}`);
+  const data = (await res.json()) as { overview?: CustomizeOverview };
+  if (!data.overview) throw new Error("customize overview missing");
+  return data.overview;
+}
+
+export async function revealInFinder(target: string): Promise<void> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/fs/reveal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: target }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `reveal failed (${res.status})`);
+  }
+}
+
+export async function openLocalPath(target: string): Promise<void> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/fs/open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: target }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `open failed (${res.status})`);
+  }
+}
