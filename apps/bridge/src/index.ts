@@ -30,6 +30,14 @@ import { listSkills } from "./skills.js";
 import {
   listCustomizeFiles,
   writeCustomizeFile,
+  loadCustomizeMcp,
+  patchGrokMcp,
+  writeCursorMcp,
+  listCustomizeHooks,
+  writeCustomizeHook,
+  deleteCustomizeHook,
+  defaultHookTemplate,
+  type GrokMcpPatch,
 } from "./customize-config.js";
 import { openWithDefaultApp, revealInFinder } from "./fs-utils.js";
 
@@ -43,7 +51,7 @@ const repoRoot = path.resolve(
 
 function cors(res: http.ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
@@ -223,8 +231,16 @@ const server = http.createServer(async (req, res) => {
         typeof body.sessionId === "string" && body.sessionId.trim()
           ? body.sessionId.trim()
           : undefined;
+      const model =
+        typeof body.model === "string" && body.model.trim()
+          ? body.model.trim()
+          : undefined;
+      const effort =
+        typeof body.effort === "string" && body.effort.trim()
+          ? body.effort.trim()
+          : undefined;
 
-      const session = await connectSession({ cwd, sessionId });
+      const session = await connectSession({ cwd, sessionId, model, effort });
       json(res, 200, { ok: true, session });
     } catch (err) {
       json(res, 500, {
@@ -299,6 +315,87 @@ const server = http.createServer(async (req, res) => {
       }
       const file = writeCustomizeFile(id, content);
       json(res, 200, { ok: true, file });
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/customize/mcp") {
+    json(res, 200, loadCustomizeMcp());
+    return;
+  }
+
+  if (req.method === "PUT" && pathname === "/api/customize/mcp") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      let state = loadCustomizeMcp();
+      if (Array.isArray(body.grok) && body.grok.length > 0) {
+        state = patchGrokMcp(body.grok as GrokMcpPatch[]);
+      }
+      if (typeof body.cursorJson === "string") {
+        state = writeCursorMcp(body.cursorJson);
+      }
+      json(res, 200, state);
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/customize/hooks") {
+    json(res, 200, listCustomizeHooks());
+    return;
+  }
+
+  if (req.method === "PUT" && pathname === "/api/customize/hooks") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      const content = typeof body.content === "string" ? body.content : "";
+      const create = body.create === true;
+      if (!name) {
+        json(res, 400, { ok: false, error: "name and content required" });
+        return;
+      }
+      let hookContent = content;
+      if (create && !hookContent.trim()) {
+        const base = name.replace(/\.json$/i, "");
+        hookContent = defaultHookTemplate(base);
+      }
+      const file = writeCustomizeHook(name, hookContent);
+      json(res, 200, { ok: true, file, ...listCustomizeHooks() });
+    } catch (err) {
+      json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  if (req.method === "DELETE" && pathname === "/api/customize/hooks") {
+    try {
+      const raw = await readBody(req);
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      const name =
+        (typeof body.name === "string" ? body.name.trim() : "") ||
+        url.searchParams.get("name")?.trim() ||
+        "";
+      if (!name) {
+        json(res, 400, { ok: false, error: "name required" });
+        return;
+      }
+      deleteCustomizeHook(name);
+      json(res, 200, { ok: true, ...listCustomizeHooks() });
     } catch (err) {
       json(res, 400, {
         ok: false,

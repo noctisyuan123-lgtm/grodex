@@ -227,12 +227,19 @@ export class GrodexAgent {
   async connect(opts: {
     cwd: string;
     sessionId?: string;
+    model?: string;
+    effort?: string;
   }): Promise<AgentSessionInfo> {
     const bin = resolveGrodexBin();
     assertGrodexBin(bin);
     this.cwd = opts.cwd;
 
-    this.proc = spawn(bin, ["agent", "stdio"], {
+    const agentArgs = ["agent"];
+    if (opts.model) agentArgs.push("--model", opts.model);
+    if (opts.effort) agentArgs.push("--effort", opts.effort);
+    agentArgs.push("stdio");
+
+    this.proc = spawn(bin, agentArgs, {
       cwd: opts.cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },

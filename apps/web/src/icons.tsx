@@ -169,6 +169,39 @@ export function IconCheck({ size, className }: P) {
   );
 }
 
+export function IconChevron({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M6 3.5L10.5 8 6 12.5" />
+    </Svg>
+  );
+}
+
+export function IconBook({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M3.5 4.5h4.5a2 2 0 0 1 2 2V13H5.5a2 2 0 0 1-2-2V4.5z" />
+      <path d="M8 4.5h4.5a2 2 0 0 1 2 2V13H8" />
+    </Svg>
+  );
+}
+
+export function IconPlus({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M8 3v10M3 8h10" />
+    </Svg>
+  );
+}
+
+export function IconTrash({ size, className }: P) {
+  return (
+    <Svg size={size} className={className}>
+      <path d="M4 5.5h8M5.5 5.5V4.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1M6 5.5l.5 7.5h5L12 5.5" />
+    </Svg>
+  );
+}
+
 export function IconList({ size, className }: P) {
   return (
     <Svg size={size} className={className}>

@@ -30,6 +30,8 @@ export function getAgent(): GrodexAgent | null {
 export async function connectSession(opts: {
   cwd: string;
   sessionId?: string;
+  model?: string;
+  effort?: string;
 }): Promise<AgentSessionInfo> {
   if (agent) {
     unsubEvents?.();

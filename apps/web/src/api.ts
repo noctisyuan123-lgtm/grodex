@@ -159,6 +159,8 @@ export async function fetchSessionHistory(sessionId: string): Promise<{
 export async function connectSession(opts?: {
   cwd?: string;
   sessionId?: string;
+  model?: string;
+  effort?: string;
 }): Promise<{ ok: true; session: SessionInfo }> {
   const res = await fetch(`${DEFAULT_BRIDGE}/api/session/connect`, {
     method: "POST",
@@ -399,4 +401,152 @@ export async function openLocalPath(target: string): Promise<void> {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error ?? `open failed (${res.status})`);
   }
+}
+
+export async function fetchSkills(cwd?: string): Promise<SkillEntry[]> {
+  const params = new URLSearchParams();
+  if (cwd) params.set("cwd", cwd);
+  const qs = params.toString();
+  const res = await fetch(
+    `${DEFAULT_BRIDGE}/api/skills${qs ? `?${qs}` : ""}`
+  );
+  if (!res.ok) return [];
+  const data = (await res.json()) as { skills?: SkillEntry[] };
+  return data.skills ?? [];
+}
+
+export type CustomizeFile = {
+  id: string;
+  name: string;
+  path: string;
+  kind: "rule" | "memory";
+  content: string;
+};
+
+export type CustomizeMcpState = {
+  grokConfigPath: string;
+  cursorMcpPath: string;
+  grok: GrokMcpServer[];
+  cursorJson: string;
+};
+
+export async function fetchCustomizeFiles(): Promise<CustomizeFile[]> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/customize/files`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { files?: CustomizeFile[] };
+  return data.files ?? [];
+}
+
+export async function saveCustomizeFile(
+  id: string,
+  content: string
+): Promise<CustomizeFile> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/customize/files`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, content }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `save failed (${res.status})`);
+  }
+  const data = (await res.json()) as { file: CustomizeFile };
+  return data.file;
+}
+
+export async function fetchCustomizeMcp(): Promise<CustomizeMcpState | null> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/customize/mcp`);
+  if (!res.ok) return null;
+  return (await res.json()) as CustomizeMcpState;
+}
+
+export async function saveCustomizeMcp(input: {
+  grok?: Array<{
+    name: string;
+    enabled?: boolean;
+    env?: Record<string, string>;
+  }>;
+  cursorJson?: string;
+}): Promise<CustomizeMcpState> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/customize/mcp`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    let msg = `save MCP failed HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) msg = body.error;
+    } catch {
+      /* keep */
+    }
+    throw new Error(msg);
+  }
+  return (await res.json()) as CustomizeMcpState;
+}
+
+export type CustomizeHookFile = {
+  id: string;
+  name: string;
+  path: string;
+  kind: "json" | "script";
+  content: string;
+  events: string[];
+};
+
+export type CustomizeHooksState = {
+  hooksDir: string;
+  files: CustomizeHookFile[];
+};
+
+export async function fetchCustomizeHooks(): Promise<CustomizeHooksState> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/customize/hooks`);
+  if (!res.ok) return { hooksDir: "", files: [] };
+  return (await res.json()) as CustomizeHooksState;
+}
+
+export async function saveCustomizeHook(
+  name: string,
+  content: string,
+  create = false
+): Promise<{ file: CustomizeHookFile } & CustomizeHooksState> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/customize/hooks`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, content, create }),
+  });
+  if (!res.ok) {
+    let msg = `save hook failed HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) msg = body.error;
+    } catch {
+      /* keep */
+    }
+    throw new Error(msg);
+  }
+  return (await res.json()) as { file: CustomizeHookFile } & CustomizeHooksState;
+}
+
+export async function deleteCustomizeHook(
+  name: string
+): Promise<CustomizeHooksState> {
+  const res = await fetch(`${DEFAULT_BRIDGE}/api/customize/hooks`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    let msg = `delete hook failed HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) msg = body.error;
+    } catch {
+      /* keep */
+    }
+    throw new Error(msg);
+  }
+  const data = (await res.json()) as CustomizeHooksState;
+  return data;
 }

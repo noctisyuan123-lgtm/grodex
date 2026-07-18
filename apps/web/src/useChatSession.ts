@@ -17,6 +17,12 @@ import {
   type SessionInfo,
 } from "./api";
 import type { ToolRow } from "./ToolTimeline";
+import {
+  getEffortFor,
+  migrateLegacyEffort,
+  setEffortFor,
+  type EffortLevel,
+} from "./modelEffort";
 
 export type { AgentMode } from "./api";
 
@@ -249,6 +255,46 @@ export function useChatSession() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [model, setModelState] = useState(
+    () => localStorage.getItem("grodex-model") || "grok-4.5"
+  );
+  const [effort, setEffortState] = useState<EffortLevel>(() => {
+    const mid = localStorage.getItem("grodex-model") || "grok-4.5";
+    migrateLegacyEffort(mid);
+    return getEffortFor(mid).effort;
+  });
+  const [effortFast, setEffortFastState] = useState(() => {
+    const mid = localStorage.getItem("grodex-model") || "grok-4.5";
+    return getEffortFor(mid).fast;
+  });
+
+  const setModel = useCallback((id: string) => {
+    setModelState(id);
+    localStorage.setItem("grodex-model", id);
+    const pref = getEffortFor(id);
+    setEffortState(pref.effort);
+    setEffortFastState(pref.fast);
+  }, []);
+
+  const setEffort = useCallback(
+    (level: EffortLevel) => {
+      setEffortState(level);
+      setEffortFastState(false);
+      setEffortFor(model, { effort: level, fast: false });
+    },
+    [model]
+  );
+
+  const setEffortFast = useCallback(
+    (fast: boolean) => {
+      setEffortFastState(fast);
+      setEffortFor(model, { effort, fast });
+    },
+    [model, effort]
+  );
+
+  const effectiveEffort = effortFast ? "minimal" : effort;
+
   const liveAssistantId = useRef("a-live");
   const assistantBuf = useRef("");
   const messageCountRef = useRef(0);
@@ -384,6 +430,8 @@ export function useChatSession() {
     const result = await connectSession({
       sessionId: sid,
       cwd: connectCwd,
+      model,
+      effort: effectiveEffort,
     });
     setSession(result.session);
     setSessionIdInput(result.session.sessionId);
@@ -553,5 +601,12 @@ export function useChatSession() {
     openHistorySession,
     onSend,
     onCancel,
+    model,
+    setModel,
+    effort,
+    setEffort,
+    effortFast,
+    setEffortFast,
+    effectiveEffort,
   };
 }

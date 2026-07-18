@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { AgentActivityStrip, RunningDock, WorkingPill } from "./AgentActivityStrip";
 import { ChatTranscript } from "./ChatTranscript";
@@ -11,6 +12,8 @@ import { CustomizePanel } from "./CustomizePanel";
 import { SearchModal, type SearchSelection } from "./SearchModal";
 import {
   IconArrowUp,
+  IconCheck,
+  IconChevron,
   IconCustomize,
   IconFolder,
   IconFolderOpen,
@@ -20,6 +23,10 @@ import {
   IconSidebar,
   IconStop,
 } from "./icons";
+import {
+  effortLabelFor,
+  getEffortFor,
+} from "./modelEffort";
 import {
   fetchRecentProjects,
   openLocalPath,
@@ -41,6 +48,21 @@ const SIDEBAR_W_KEY = "grodex-sidebar-w";
 const SIDEBAR_COLLAPSED_KEY = "grodex-sidebar-collapsed";
 const PLAN_SEED =
   "Plan a clean approach for the next change. List steps, risks, and files to touch before editing.";
+
+const MODEL_OPTIONS = [
+  { id: "grok-4.5", label: "Grok 4.5", supportsEffort: true },
+  {
+    id: "grok-composer-2.5-fast",
+    label: "Composer 2.5",
+    supportsEffort: true,
+  },
+] as const;
+
+const EFFORT_OPTIONS = [
+  { id: "low" as const, label: "Low" },
+  { id: "medium" as const, label: "Medium" },
+  { id: "high" as const, label: "High" },
+];
 
 function folderName(p: string): string {
   const parts = p.split("/").filter(Boolean);
@@ -98,7 +120,16 @@ export function App() {
     onDisconnect,
     onSend,
     onCancel,
+    model,
+    setModel,
+    effort,
+    setEffort,
+    effortFast,
+    setEffortFast,
   } = chat;
+
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [effortMenuOpen, setEffortMenuOpen] = useState(false);
 
   const [draft, setDraft] = useState("");
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -314,6 +345,53 @@ export function App() {
   const dockDetail =
     activityPhase === "sleeping" && processLine?.trim() ? processLine.trim() : null;
 
+  const modelMeta =
+    MODEL_OPTIONS.find((m) => m.id === model) ?? MODEL_OPTIONS[0];
+  const effortLabel = effortLabelFor({ effort, fast: effortFast });
+  const modelChipLabel = `${modelMeta.label} ${effortLabel}`;
+
+  useEffect(() => {
+    if (!modelMenuOpen && !effortMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest(".model-picker")) return;
+      setModelMenuOpen(false);
+      setEffortMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setEffortMenuOpen(false);
+        setModelMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [modelMenuOpen, effortMenuOpen]);
+
+  const pickModel = (id: string) => {
+    setModel(id);
+  };
+
+  const toggleEffortFast = () => {
+    setEffortFast(!effortFast);
+  };
+
+  const openModelEffortEdit = (e: ReactMouseEvent, modelId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    pickModel(modelId);
+    setModelMenuOpen(true);
+    setEffortMenuOpen(true);
+  };
+
+  const pickEffort = (id: "low" | "medium" | "high") => {
+    setEffort(id);
+  };
+
   const submit = () => {
     if (showStop) {
       void onCancel();
@@ -359,6 +437,109 @@ export function App() {
             rows={showHome ? 2 : 1}
             onKeyDown={onComposerKeyDown}
           />
+        </div>
+        <div
+          className={`model-picker ${modelMenuOpen ? "open" : ""} ${
+            showHome ? "dock-left" : "dock-right"
+          }`}
+        >
+          <button
+            type="button"
+            className="model-chip-btn"
+            title="Model & effort for the next New Agent / reconnect"
+            onClick={() => {
+              setModelMenuOpen((v) => {
+                const next = !v;
+                if (!next) setEffortMenuOpen(false);
+                return next;
+              });
+            }}
+          >
+            <span className="model-chip-label">{modelChipLabel}</span>
+            <IconChevron size={12} className="model-chip-chevron" />
+          </button>
+          {(effortMenuOpen || modelMenuOpen) && (
+            <div className="model-menu" role="listbox">
+              {modelMenuOpen && (
+                <div className="model-menu-list">
+                  {MODEL_OPTIONS.map((m) => {
+                    const selected = model === m.id;
+                    const rowLabel = selected
+                      ? effortLabel
+                      : effortLabelFor(getEffortFor(m.id));
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={`model-menu-item ${selected ? "selected" : ""}`}
+                        onClick={() => pickModel(m.id)}
+                      >
+                        <span className="model-menu-name">{m.label}</span>
+                        <span className="model-menu-effort">{rowLabel}</span>
+                        <span
+                          className={`model-menu-check-slot ${
+                            selected ? "on" : ""
+                          }`}
+                          aria-hidden={!selected}
+                        >
+                          {selected ? (
+                            <IconCheck size={14} className="model-menu-check" />
+                          ) : null}
+                        </span>
+                        <button
+                          type="button"
+                          className="effort-edit-btn"
+                          title="Edit effort for this model"
+                          onClick={(e) => openModelEffortEdit(e, m.id)}
+                        >
+                          Edit
+                        </button>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {effortMenuOpen && (
+                <div className="effort-menu" role="menu">
+                  <div className="effort-menu-title">Effort</div>
+                  {EFFORT_OPTIONS.map((e) => {
+                    const selected = !effortFast && effort === e.id;
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        className={`effort-menu-item ${
+                          selected ? "selected" : ""
+                        }`}
+                        onClick={() => pickEffort(e.id)}
+                      >
+                        <span>{e.label}</span>
+                        {selected ? <IconCheck size={14} /> : null}
+                      </button>
+                    );
+                  })}
+                  <div className="effort-menu-sep" />
+                  <div className="effort-menu-title">Options</div>
+                  <label className="effort-fast-row">
+                    <span>Fast</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={effortFast}
+                      className={`toggle-switch ${effortFast ? "on" : ""}`}
+                      onClick={toggleEffortFast}
+                    >
+                      <i />
+                    </button>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -556,7 +737,11 @@ export function App() {
         {customizeOpen ? (
           <CustomizePanel
             connected={Boolean(connected)}
+            bridgeLabel="grodex"
             cwd={cwd}
+            model={modelMeta.label}
+            effortLabel={effortLabel}
+            agentMode={agentMode}
             onClose={() => setCustomizeOpen(false)}
           />
         ) : showHome ? (
