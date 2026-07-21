@@ -35,7 +35,7 @@ Changing the chip does **not** hot-swap an active session — disconnect / New A
 ## Try it
 
 ```bash
-cd /Users/maybach/projects/grodex
+cd /Users/maybach/grodex
 
 # Terminal 1 — bridge
 npm run dev -w @grodex/bridge

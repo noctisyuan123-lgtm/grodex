@@ -13,7 +13,7 @@ Date: 2026-07-18 (local)
 ## Commands run
 
 ```bash
-cd /Users/maybach/projects/grodex
+cd /Users/maybach/grodex
 
 # Initial attempts (failed — see blockers)
 cargo check -p xai-grok-pager-bin
@@ -35,7 +35,7 @@ Logs: `/tmp/grodex-cargo-check2.log`, `/tmp/grodex-cargo-release.log`
 
 Release binary:
 
-`/Users/maybach/projects/grodex/target/release/xai-grok-pager`
+`/Users/maybach/grodex/target/release/xai-grok-pager`
 
 (~151 MB, crate `xai-grok-pager-bin`, binary name `xai-grok-pager`)
 

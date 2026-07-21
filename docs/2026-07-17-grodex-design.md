@@ -136,4 +136,4 @@ Only acceptable if resume uses **load/attach same UUID**, not digest-new-session
 - [x] Product name `grodex` confirmed  
 - [x] Structure (Core / CLI / Desktop / API) confirmed  
 - [x] agent-pane = materials only confirmed  
-- [x] G0 done — fork + README: https://github.com/noctisyuan123-lgtm/grodex (local: `~/projects/grodex`)  
+- [x] G0 done — fork + README: https://github.com/noctisyuan123-lgtm/grodex (local: `~/grodex`)  
